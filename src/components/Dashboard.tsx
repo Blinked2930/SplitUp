@@ -13,8 +13,6 @@ import {
   History,
   Receipt,
   Scale,
-  Settings as SettingsIcon,
-  CheckCircle2,
   Wallet,
   Share2,
   Check,
@@ -29,16 +27,16 @@ export const Dashboard: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<Id<'groups'> | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
   const activities = useQuery((api as any).groups?.getActivityFeed, {});
 
-  const handleCopyGroupId = (e: React.MouseEvent, groupId: string) => {
+  const handleCopyCode = (e: React.MouseEvent, codeOrId: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(groupId);
-    setCopiedId(groupId);
-    setTimeout(() => setCopiedId(null), 2000);
+    navigator.clipboard.writeText(codeOrId);
+    setCopiedCode(codeOrId);
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
   if (selectedGroupId) {
@@ -144,49 +142,52 @@ export const Dashboard: React.FC = () => {
                   <p className="text-xs text-slate-400">Create or join a group to start splitting expenses.</p>
                 </div>
               ) : (
-                groups.map((group: any) => (
-                  <div
-                    key={group._id}
-                    onClick={() => setSelectedGroupId(group._id)}
-                    className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer space-y-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-sm">
-                          👥
+                groups.map((group: any) => {
+                  const displayCode = group.inviteCode || group._id.slice(-6).toUpperCase();
+                  return (
+                    <div
+                      key={group._id}
+                      onClick={() => setSelectedGroupId(group._id)}
+                      className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-sm">
+                            👥
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-900 text-sm">{group.name}</h4>
+                            <p className="text-xs text-slate-400 font-medium">{group.currency}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-sm">{group.name}</h4>
-                          <p className="text-xs text-slate-400 font-medium">{group.currency}</p>
-                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-300" />
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300" />
-                    </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
-                        ID: {group._id}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleCopyGroupId(e, group._id)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg"
-                      >
-                        {copiedId === group._id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Share2 className="w-3 h-3" />
-                            <span>Copy ID</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-xl">
+                          Code: {displayCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(e, displayCode)}
+                          className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl"
+                        >
+                          {copiedCode === displayCode ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="w-3 h-3" />
+                              <span>Copy Code</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -286,34 +287,6 @@ export const Dashboard: React.FC = () => {
                 </div>
               ))
             )}
-          </div>
-        )}
-
-        {/* TAB 4: SETTINGS */}
-        {activeTab === 'settings' && (
-          <div className="p-6 rounded-3xl bg-white border border-slate-200 space-y-4 animate-in fade-in">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-              <div className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-600">
-                <SettingsIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm">Splitup App Settings</h3>
-                <p className="text-xs text-slate-400">Version 1.0.0</p>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Shared Backend</span>
-                <span className="font-bold text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Convex Active
-                </span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-slate-600 font-medium">PWA Offline Storage</span>
-                <span className="font-bold text-slate-900">Enabled</span>
-              </div>
-            </div>
           </div>
         )}
       </main>
