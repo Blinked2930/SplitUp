@@ -37,7 +37,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(members.map((m) => m._id));
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
 
-  // Custom splits state maps: memberId -> amount or share count
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [sharesMap, setSharesMap] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,14 +72,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     }
   };
 
-  // Sum of exact split amounts allocated so far
   const totalExactAllocated = selectedMemberIds.reduce((sum, id) => {
     return sum + (parseFloat(exactAmounts[id] || '0') || 0);
   }, 0);
 
   const exactDifference = Math.round((numAmount - totalExactAllocated) * 100) / 100;
 
-  // Sum of shares for active members
   const totalShares = selectedMemberIds.reduce((sum, id) => {
     return sum + (sharesMap[id] || 1);
   }, 0);
@@ -156,7 +153,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto font-sans">
+      <div 
+        className="w-full max-w-md bg-white rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto font-sans"
+        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+      >
+        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden -mt-1 mb-1" />
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
@@ -167,7 +168,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -240,7 +241,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </select>
           </div>
 
-          {/* Split Mode Selector Tabs */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
               Split Option
@@ -287,7 +287,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </div>
           </div>
 
-          {/* Equal Split UI */}
           {splitMode === 'equal' && (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
@@ -313,7 +312,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </div>
           )}
 
-          {/* Exact Amounts Split UI */}
           {splitMode === 'exact' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs px-1 font-medium">
@@ -356,7 +354,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </div>
           )}
 
-          {/* Shares Split UI */}
           {splitMode === 'shares' && (
             <div className="space-y-2">
               <p className="text-[10px] text-slate-400 font-medium">
@@ -387,7 +384,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                               [m._id]: Math.max(0, currentShare - 1),
                             })
                           }
-                          className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center hover:bg-slate-200"
+                          className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center hover:bg-slate-200 cursor-pointer"
                         >
                           -
                         </button>
@@ -400,7 +397,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                               [m._id]: currentShare + 1,
                             })
                           }
-                          className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center hover:bg-slate-200"
+                          className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 font-bold flex items-center justify-center hover:bg-slate-200 cursor-pointer"
                         >
                           +
                         </button>
