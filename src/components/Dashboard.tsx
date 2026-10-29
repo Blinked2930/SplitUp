@@ -1,16 +1,31 @@
 import React, { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { Id } from '../../convex/_generated/dataModel';
 import { Plus, Users, ArrowUpRight, ArrowDownLeft, Sparkles, ChevronRight, Loader2 } from 'lucide-react';
 import { BottomNav, SplitTab } from './BottomNav';
+import { CreateGroupModal } from './CreateGroupModal';
+import { GroupDetailView } from './GroupDetailView';
 
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SplitTab>('groups');
-  const groups = useQuery(api.groups.getMyGroups, {});
+  const [selectedGroupId, setSelectedGroupId] = useState<Id<'groups'> | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+
+  const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
+
+  if (selectedGroupId) {
+    return (
+      <GroupDetailView
+        groupId={selectedGroupId}
+        onBack={() => setSelectedGroupId(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
-      {/* Sticky Header without Clerk Avatar */}
+      {/* Sticky Header */}
       <header
         className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-md"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -66,9 +81,10 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
+            onClick={() => setShowCreateGroup(true)}
             className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-900 text-white font-semibold text-xs shadow-sm hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-emerald-400" />
             <span>New Group</span>
           </button>
           <button
@@ -102,6 +118,7 @@ export const Dashboard: React.FC = () => {
             groups.map((group: any) => (
               <div
                 key={group._id}
+                onClick={() => setSelectedGroupId(group._id)}
                 className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer space-y-3"
               >
                 <div className="flex items-center justify-between">
@@ -121,6 +138,11 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       </main>
+
+      <CreateGroupModal
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+      />
 
       {/* Floating Glassmorphic Navigation */}
       <BottomNav active={activeTab} onChange={setActiveTab} />
