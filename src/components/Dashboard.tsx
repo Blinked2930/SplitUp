@@ -1,4 +1,3 @@
-// src/components/Dashboard.tsx
 import React, { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -17,6 +16,8 @@ import {
   Settings as SettingsIcon,
   CheckCircle2,
   Wallet,
+  Share2,
+  Check,
 } from 'lucide-react';
 import { BottomNav, SplitTab } from './BottomNav';
 import { CreateGroupModal } from './CreateGroupModal';
@@ -28,9 +29,17 @@ export const Dashboard: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<Id<'groups'> | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
   const activities = useQuery((api as any).groups?.getActivityFeed, {});
+
+  const handleCopyGroupId = (e: React.MouseEvent, groupId: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(groupId);
+    setCopiedId(groupId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   if (selectedGroupId) {
     return (
@@ -152,6 +161,29 @@ export const Dashboard: React.FC = () => {
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-slate-300" />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
+                        ID: {group._id}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyGroupId(e, group._id)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg"
+                      >
+                        {copiedId === group._id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-3 h-3" />
+                            <span>Copy ID</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 ))
