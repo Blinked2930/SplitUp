@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#059669"/>
+  <!-- Decorative background subtle gradients / rings -->
+  <circle cx="256" cy="256" r="180" stroke="#10b981" stroke-width="12" stroke-opacity="0.3"/>
+  <circle cx="256" cy="256" r="130" stroke="#34d399" stroke-width="8" stroke-opacity="0.2"/>
+  <!-- Dynamic split cash / transaction geometry -->
+  <path d="M160 180H352C365.255 180 376 190.745 376 204V308C376 321.255 365.255 332 352 332H160C146.745 332 136 321.255 136 308V204C136 190.745 146.745 180 160 180Z" fill="white" fill-opacity="0.95"/>
+  <circle cx="256" cy="256" r="44" fill="#059669"/>
+  <!-- Stylized "L" for Lek inside circle -->
+  <path d="M246 236V276H270" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Split arrows indicating group sharing -->
+  <path d="M112 256H136" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <path d="M376 256H400" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <path d="M256 112V136" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  <path d="M256 376V400" stroke="white" stroke-width="10" stroke-linecap="round"/>
+</svg>
+
