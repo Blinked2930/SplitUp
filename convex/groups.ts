@@ -79,7 +79,10 @@ export const getGroupDetails = query({
       .collect();
 
     return {
-      group,
+      group: {
+        ...group,
+        allowedCurrencies: (group as any).allowedCurrencies || ["ALL", "EUR", "USD"],
+      },
       members,
       expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
       settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
@@ -227,6 +230,9 @@ export const createGroup = mutation({
   args: {
     name: v.string(),
     currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    allowedCurrencies: v.optional(
+      v.array(v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")))
+    ),
     description: v.optional(v.string()),
     memberName: v.string(),
     additionalMembers: v.optional(v.array(v.string())),
@@ -240,6 +246,7 @@ export const createGroup = mutation({
     const groupData: {
       name: string;
       currency: "ALL" | "EUR" | "USD";
+      allowedCurrencies: string[];
       description?: string;
       createdBy: string;
       createdAt: number;
@@ -247,6 +254,7 @@ export const createGroup = mutation({
     } = {
       name: args.name,
       currency: args.currency,
+      allowedCurrencies: args.allowedCurrencies || ["ALL", "EUR", "USD"],
       createdBy: userId,
       createdAt: now,
       inviteCode,
@@ -279,6 +287,24 @@ export const createGroup = mutation({
     }
 
     return { groupId, inviteCode, memberId: creatorMemberId };
+  },
+});
+
+export const updateGroupSettings = mutation({
+  args: {
+    groupId: v.id("groups"),
+    name: v.string(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    allowedCurrencies: v.array(
+      v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD"))
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.groupId, {
+      name: args.name.trim(),
+      currency: args.currency,
+      allowedCurrencies: args.allowedCurrencies as any,
+    });
   },
 });
 

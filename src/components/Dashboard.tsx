@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
@@ -27,14 +27,25 @@ export const Dashboard: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<Id<'groups'> | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const [deepLinkCode, setDeepLinkCode] = useState<string | undefined>(undefined);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
   const activities = useQuery((api as any).groups?.getActivityFeed, {});
 
-  const handleCopyCode = (e: React.MouseEvent, codeOrId: string) => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinParam = params.get('join');
+    if (joinParam) {
+      setDeepLinkCode(joinParam.trim().toUpperCase());
+      setShowJoinGroup(true);
+    }
+  }, []);
+
+  const handleCopyInviteLink = (e: React.MouseEvent, codeOrId: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(codeOrId);
+    const inviteUrl = `${window.location.origin}?join=${codeOrId}`;
+    navigator.clipboard.writeText(inviteUrl);
     setCopiedCode(codeOrId);
     setTimeout(() => setCopiedCode(null), 2000);
   };
@@ -116,7 +127,10 @@ export const Dashboard: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setShowJoinGroup(true)}
+                onClick={() => {
+                  setDeepLinkCode(undefined);
+                  setShowJoinGroup(true);
+                }}
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white text-slate-700 font-semibold text-xs border border-slate-200 shadow-sm hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 <Users className="w-4 h-4 text-emerald-600" />
@@ -169,18 +183,18 @@ export const Dashboard: React.FC = () => {
                         </span>
                         <button
                           type="button"
-                          onClick={(e) => handleCopyCode(e, displayCode)}
+                          onClick={(e) => handleCopyInviteLink(e, displayCode)}
                           className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl"
                         >
                           {copiedCode === displayCode ? (
                             <>
                               <Check className="w-3 h-3 text-emerald-600" />
-                              <span>Copied</span>
+                              <span>Link Copied</span>
                             </>
                           ) : (
                             <>
                               <Share2 className="w-3 h-3" />
-                              <span>Copy Code</span>
+                              <span>Copy Invite Link</span>
                             </>
                           )}
                         </button>
@@ -301,6 +315,7 @@ export const Dashboard: React.FC = () => {
         isOpen={showJoinGroup}
         onClose={() => setShowJoinGroup(false)}
         onSuccess={(id: any) => setSelectedGroupId(id)}
+        initialCode={deepLinkCode}
       />
 
       <BottomNav active={activeTab} onChange={setActiveTab} />

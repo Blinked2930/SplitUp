@@ -1,9 +1,8 @@
-// src/components/AddExpenseModal.tsx
 import React, { useState, useEffect } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown } from 'lucide-react';
+import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown, RefreshCw } from 'lucide-react';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -15,16 +14,27 @@ interface AddExpenseModalProps {
   onClose: () => void;
   groupId: Id<'groups'>;
   groupCurrency: 'ALL' | 'EUR' | 'USD';
+  allowedCurrencies?: Array<'ALL' | 'EUR' | 'USD'>;
   members: Member[];
 }
 
 type SplitMode = 'equal' | 'exact' | 'shares';
+
+const DEFAULT_RATES: Record<string, number> = {
+  EUR_ALL: 100,
+  USD_ALL: 90,
+  ALL_EUR: 0.01,
+  ALL_USD: 0.011,
+  EUR_USD: 1.08,
+  USD_EUR: 0.92,
+};
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
   onClose,
   groupId,
   groupCurrency,
+  allowedCurrencies = ['ALL', 'EUR', 'USD'],
   members,
 }) => {
   const addExpenseMutation = useMutation(
@@ -33,6 +43,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
+  const [selectedCurrency, setSelectedCurrency] = useState<'ALL' | 'EUR' | 'USD'>(groupCurrency);
+  const [customFxRate, setCustomFxRate] = useState<string>('1');
   const [category, setCategory] = useState('General');
   const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?._id ?? '');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(members.map((m) => m._id));
@@ -40,8 +52,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [sharesMap, setSharesMap] = useState<Record<string, number>>({});
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showPaidByDropdown, setShowPaidByDropdown] = useState(false);
+  const [showCategoryPopover, setShowCategoryPopover] = useState(false);
+  const [showPaidByPopover, setShowPaidByPopover] = useState(false);
+  const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -63,9 +76,21 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     }
   }, [members]);
 
+  useEffect(() => {
+    if (selectedCurrency === groupCurrency) {
+      setCustomFxRate('1');
+    } else {
+      const pair = `${selectedCurrency}_${groupCurrency}`;
+      const defaultRate = DEFAULT_RATES[pair] || 1;
+      setCustomFxRate(defaultRate.toString());
+    }
+  }, [selectedCurrency, groupCurrency]);
+
   if (!isOpen) return null;
 
   const numAmount = parseFloat(amount) || 0;
+  const numRate = parseFloat(customFxRate) || 1;
+  const baseConvertedAmount = Math.round(numAmount * numRate * 100) / 100;
 
   const toggleMember = (id: string) => {
     if (selectedMemberIds.includes(id)) {
@@ -81,7 +106,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     return sum + (parseFloat(exactAmounts[id] || '0') || 0);
   }, 0);
 
-  const exactDifference = Math.round((numAmount - totalExactAllocated) * 100) / 100;
+  const exactDifference = Math.round((baseConvertedAmount - totalExactAllocated) * 100) / 100;
 
   const totalShares = selectedMemberIds.reduce((sum, id) => {
     return sum + (sharesMap[id] || 1);
@@ -99,7 +124,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     let splits: { memberId: Id<'groupMembers'>; amountALL: number }[] = [];
 
     if (splitMode === 'equal') {
-      const splitVal = Math.round((numAmount / selectedMemberIds.length) * 100) / 100;
+      const splitVal = Math.round((baseConvertedAmount / selectedMemberIds.length) * 100) / 100;
       splits = selectedMemberIds.map((mId) => ({
         memberId: mId as Id<'groupMembers'>,
         amountALL: splitVal,
@@ -107,7 +132,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     } else if (splitMode === 'exact') {
       if (Math.abs(exactDifference) > 0.05) {
         setErrorMsg(
-          `Exact splits must sum to ${numAmount} ${groupCurrency}. Remaining: ${exactDifference} ${groupCurrency}`
+          `Exact splits must sum to ${baseConvertedAmount} ${groupCurrency}. Remaining: ${exactDifference} ${groupCurrency}`
         );
         return;
       }
@@ -122,7 +147,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       }
       splits = selectedMemberIds.map((mId) => {
         const memberShares = sharesMap[mId] || 1;
-        const calculatedAmount = Math.round(((numAmount * memberShares) / totalShares) * 100) / 100;
+        const calculatedAmount = Math.round(((baseConvertedAmount * memberShares) / totalShares) * 100) / 100;
         return {
           memberId: mId as Id<'groupMembers'>,
           amountALL: calculatedAmount,
@@ -136,8 +161,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         groupId,
         title: title.trim(),
         amount: numAmount,
-        currency: groupCurrency,
-        amountInALL: numAmount,
+        currency: selectedCurrency,
+        amountInALL: baseConvertedAmount,
         category: category.trim() || 'General',
         paidByMemberId: paidByMemberId as Id<'groupMembers'>,
         splitType: splitMode,
@@ -165,7 +190,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto font-sans"
+        className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 font-sans max-h-[85vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
@@ -201,7 +226,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Amount ({groupCurrency}) *
+                Amount *
               </label>
               <input
                 type="number"
@@ -214,69 +239,73 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               />
             </div>
 
-            <div className="relative">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Currency
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowCurrencyPopover(true)}
+                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-bold flex items-center justify-between cursor-pointer hover:border-slate-300 transition-colors"
+              >
+                <span>{selectedCurrency}</span>
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
+            </div>
+          </div>
+
+          {/* FX Conversion Line if different from base currency */}
+          {selectedCurrency !== groupCurrency && (
+            <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-bold text-amber-900">
+                <span className="flex items-center gap-1">
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                  Convert to {groupCurrency}
+                </span>
+                <span className="font-mono">{baseConvertedAmount} {groupCurrency}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-amber-700 text-[10px]">1 {selectedCurrency} =</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={customFxRate}
+                  onChange={(e) => setCustomFxRate(e.target.value)}
+                  className="w-24 px-2 py-1 rounded-xl bg-white border border-amber-300 font-mono text-xs text-amber-900 focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-amber-700 text-[10px]">{groupCurrency}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Category
               </label>
               <button
                 type="button"
-                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-semibold flex items-center justify-between cursor-pointer"
+                onClick={() => setShowCategoryPopover(true)}
+                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-semibold flex items-center justify-between cursor-pointer hover:border-slate-300 transition-colors"
               >
                 <span className="truncate">{category}</span>
                 <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
               </button>
-
-              {showCategoryDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
-                  {categories.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => {
-                        setCategory(cat);
-                        setShowCategoryDropdown(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-          </div>
 
-          <div className="relative">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Paid By *
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowPaidByDropdown(!showPaidByDropdown)}
-              className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-semibold flex items-center justify-between cursor-pointer"
-            >
-              <span>{paidByName}</span>
-              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-            </button>
-
-            {showPaidByDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
-                {members.map((m) => (
-                  <button
-                    key={m._id}
-                    type="button"
-                    onClick={() => {
-                      setPaidByMemberId(m._id);
-                      setShowPaidByDropdown(false);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Paid By *
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPaidByPopover(true)}
+                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-semibold flex items-center justify-between cursor-pointer hover:border-slate-300 transition-colors"
+              >
+                <span className="truncate">{paidByName}</span>
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2 pt-2 border-t border-slate-100">
@@ -326,27 +355,25 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           </div>
 
           {splitMode === 'equal' && (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {members.map((m) => {
-                  const isSelected = selectedMemberIds.includes(m._id);
-                  return (
-                    <button
-                      key={m._id}
-                      type="button"
-                      onClick={() => toggleMember(m._id)}
-                      className={`py-2.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                          : 'bg-slate-50 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <span>{m.name}</span>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="grid grid-cols-2 gap-2">
+              {members.map((m) => {
+                const isSelected = selectedMemberIds.includes(m._id);
+                return (
+                  <button
+                    key={m._id}
+                    type="button"
+                    onClick={() => toggleMember(m._id)}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    <span>{m.name}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -354,21 +381,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs px-1 font-medium">
                 <span className="text-slate-500">Allocated: {totalExactAllocated} {groupCurrency}</span>
-                <span
-                  className={
-                    Math.abs(exactDifference) <= 0.05
-                      ? 'text-emerald-600 font-bold'
-                      : 'text-rose-600 font-bold'
-                  }
-                >
-                  {exactDifference === 0
-                    ? 'Balanced'
-                    : exactDifference > 0
-                    ? `${exactDifference} ${groupCurrency} left`
-                    : `${Math.abs(exactDifference)} ${groupCurrency} over`}
+                <span className={Math.abs(exactDifference) <= 0.05 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                  {exactDifference === 0 ? 'Balanced' : `${exactDifference} ${groupCurrency} remaining`}
                 </span>
               </div>
-
               <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                 {members.map((m) => (
                   <div key={m._id} className="flex items-center justify-between gap-2 text-xs">
@@ -401,8 +417,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
                 {members.map((m) => {
                   const currentShare = sharesMap[m._id] ?? 1;
                   const calculatedPortion =
-                    totalShares > 0 && numAmount > 0
-                      ? Math.round(((numAmount * currentShare) / totalShares) * 100) / 100
+                    totalShares > 0 && baseConvertedAmount > 0
+                      ? Math.round(((baseConvertedAmount * currentShare) / totalShares) * 100) / 100
                       : 0;
 
                   return (
@@ -463,6 +479,117 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             <span>{isSubmitting ? 'Saving...' : 'Save Expense'}</span>
           </button>
         </form>
+
+        {/* Currency Popover */}
+        {showCurrencyPopover && (
+          <div
+            onClick={() => setShowCurrencyPopover(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2 font-sans"
+            >
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
+                Allowed Currencies
+              </h4>
+              <div className="space-y-1">
+                {allowedCurrencies.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCurrency(c);
+                      setShowCurrencyPopover(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                      selectedCurrency === c
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{c}</span>
+                    {selectedCurrency === c && <Check className="w-4 h-4 text-emerald-600" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category Popover */}
+        {showCategoryPopover && (
+          <div
+            onClick={() => setShowCategoryPopover(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2 font-sans"
+            >
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
+                Select Category
+              </h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setCategory(cat);
+                      setShowCategoryPopover(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                      category === cat
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{cat}</span>
+                    {category === cat && <Check className="w-4 h-4 text-emerald-600" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Paid By Popover */}
+        {showPaidByPopover && (
+          <div
+            onClick={() => setShowPaidByPopover(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2 font-sans"
+            >
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
+                Select Member
+              </h4>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                {members.map((m) => (
+                  <button
+                    key={m._id}
+                    type="button"
+                    onClick={() => {
+                      setPaidByMemberId(m._id);
+                      setShowPaidByPopover(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                      paidByMemberId === m._id
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{m.name}</span>
+                    {paidByMemberId === m._id && <Check className="w-4 h-4 text-emerald-600" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

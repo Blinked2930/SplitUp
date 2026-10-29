@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
@@ -8,22 +8,31 @@ interface JoinGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (groupId: Id<'groups'>) => void;
+  initialCode?: string;
 }
 
 export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  initialCode,
 }) => {
-  const [groupIdInput, setGroupIdInput] = useState('');
-  const [validatedGroupId, setValidatedGroupId] = useState<Id<'groups'> | null>(null);
+  const [groupIdInput, setGroupIdInput] = useState(initialCode || '');
+  const [validatedQuery, setValidatedQuery] = useState<string | null>(initialCode || null);
   const [memberName, setMemberName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (isOpen && initialCode) {
+      setGroupIdInput(initialCode);
+      setValidatedQuery(initialCode);
+    }
+  }, [isOpen, initialCode]);
+
   const unclaimedData = useQuery(
     (api as any).groups?.getUnclaimedMembers,
-    validatedGroupId ? { groupId: validatedGroupId } : 'skip'
+    validatedQuery ? { groupIdOrCode: validatedQuery } : 'skip'
   );
 
   const joinGroupMutation = useMutation((api as any).groups?.joinGroup);
@@ -36,10 +45,10 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
     setError(null);
     const trimmed = groupIdInput.trim();
     if (!trimmed) {
-      setError('Please enter a valid Group ID.');
+      setError('Please enter a valid Group Code or ID.');
       return;
     }
-    setValidatedGroupId(trimmed as Id<'groups'>);
+    setValidatedQuery(trimmed);
   };
 
   const handleClaimProfile = async (memberId: Id<'groupMembers'>, originalName: string) => {
@@ -62,7 +71,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
 
   const handleJoinAsNew = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validatedGroupId) return;
+    if (!validatedQuery) return;
     const trimmedName = memberName.trim();
     if (!trimmedName) {
       setError('Please enter your display name.');
@@ -73,7 +82,7 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
     setError(null);
     try {
       const res = await joinGroupMutation({
-        groupId: validatedGroupId,
+        groupIdOrCode: validatedQuery,
         memberName: trimmedName,
       });
       handleClose();
@@ -88,27 +97,28 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
 
   const handleClose = () => {
     setGroupIdInput('');
-    setValidatedGroupId(null);
+    setValidatedQuery(null);
     setMemberName('');
     setError(null);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+    <div
+      onClick={handleClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+    >
       <div
-        className="w-full max-w-md bg-white rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-slate-200 shadow-2xl p-6 space-y-4 font-sans max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 font-sans max-h-[85vh] overflow-y-auto"
       >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden -mt-1 mb-1" />
-
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
               <Users className="w-5 h-5" />
             </div>
             <h3 className="text-lg font-bold text-slate-900">
-              {validatedGroupId ? 'Claim Your Profile' : 'Join Existing Group'}
+              {validatedQuery ? 'Claim Your Profile' : 'Join Existing Group'}
             </h3>
           </div>
           <button
@@ -120,19 +130,19 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
           </button>
         </div>
 
-        {!validatedGroupId ? (
+        {!validatedQuery ? (
           <form onSubmit={handleValidateGroupId} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Paste Group Invite ID *
+                Paste Group Invite Code or ID *
               </label>
               <input
                 type="text"
                 required
-                placeholder="e.g. jx7842a..."
+                placeholder="e.g. TRIP-89X"
                 value={groupIdInput}
                 onChange={(e) => setGroupIdInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-mono text-sm focus:outline-none focus:border-emerald-500"
               />
             </div>
 
@@ -154,20 +164,25 @@ export const JoinGroupModal: React.FC<JoinGroupModalProps> = ({
           </div>
         ) : unclaimedData === null ? (
           <div className="py-4 text-center space-y-3">
-            <p className="text-xs text-rose-600 font-bold">Group not found or deleted.</p>
+            <p className="text-xs text-rose-600 font-bold">Group not found with code "{validatedQuery}".</p>
             <button
               type="button"
-              onClick={() => setValidatedGroupId(null)}
+              onClick={() => setValidatedQuery(null)}
               className="text-xs text-slate-600 underline font-semibold cursor-pointer"
             >
-              Try another ID
+              Try another code
             </button>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
-              <span className="text-slate-400">Joining: </span>
-              <span className="font-bold text-slate-900">{unclaimedData.groupName}</span>
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-slate-400 block">Joining Group</span>
+                <span className="font-bold text-slate-900 text-sm">{unclaimedData.groupName}</span>
+              </div>
+              <span className="font-mono text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-xl">
+                Code: {unclaimedData.inviteCode}
+              </span>
             </div>
 
             {unclaimedData.unclaimedMembers.length > 0 && (

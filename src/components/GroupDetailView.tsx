@@ -16,11 +16,13 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Settings2,
 } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
 import { SettleDebtModal } from './SettleDebtModal';
 import { EditExpenseModal } from './EditExpenseModal';
+import { GroupSettingsModal } from './GroupSettingsModal';
 import { calculateBalances, simplifyDebts } from '../utils/debtCalculator';
 
 interface GroupDetailViewProps {
@@ -34,6 +36,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showSettle, setShowSettle] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -86,9 +89,11 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   }
 
   const { group, members, expenses } = details;
+  const inviteCode = group.inviteCode || group._id.slice(-6).toUpperCase();
 
-  const handleCopyGroupId = () => {
-    navigator.clipboard.writeText(group._id);
+  const handleCopyInviteLink = () => {
+    const inviteUrl = `${window.location.origin}?join=${inviteCode}`;
+    navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -116,16 +121,26 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           </button>
           <div className="text-center">
             <h2 className="font-bold text-slate-900 text-base">{group.name}</h2>
-            <p className="text-[10px] text-slate-400 font-medium">{members.length} Members</p>
+            <p className="text-[10px] text-slate-400 font-medium">Code: {inviteCode}</p>
           </div>
-          <button
-            type="button"
-            onClick={handleCopyGroupId}
-            className="p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
-            title="Copy Invite ID"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Group Settings"
+            >
+              <Settings2 className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyInviteLink}
+              className="p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Copy Invite Link"
+            >
+              {copied ? <Check className="w-5 h-5 text-emerald-600" /> : <Share2 className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -273,17 +288,24 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                     <h4 className="font-bold text-slate-900 text-sm">{exp.title}</h4>
                     <Pencil className="w-3 h-3 text-slate-300" />
                   </div>
-                  {exp.category && (
-                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
-                      {exp.category}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {exp.category && (
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
+                        {exp.category}
+                      </span>
+                    )}
+                    {exp.currency !== group.currency && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-mono font-bold">
+                        {exp.amount} {exp.currency}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-slate-400 font-medium mt-1">
                     {new Date(exp.timestamp).toLocaleDateString()}
                   </p>
                 </div>
                 <span className="font-mono font-bold text-slate-900 text-sm">
-                  {exp.amount} {exp.currency}
+                  {exp.amountInALL || exp.amount} {group.currency}
                 </span>
               </div>
             ))
@@ -296,6 +318,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         onClose={() => setShowAddExpense(false)}
         groupId={groupId}
         groupCurrency={group.currency}
+        allowedCurrencies={group.allowedCurrencies || ['ALL', 'EUR', 'USD']}
         members={members}
       />
 
@@ -322,6 +345,15 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         expense={selectedExpense}
         groupCurrency={group.currency}
         members={members}
+      />
+
+      <GroupSettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        groupId={groupId}
+        currentName={group.name}
+        currentCurrency={group.currency}
+        currentAllowedCurrencies={group.allowedCurrencies || ['ALL', 'EUR', 'USD']}
       />
     </div>
   );
