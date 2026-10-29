@@ -1,8 +1,9 @@
+// src/components/AddExpenseModal.tsx
 import React, { useState, useEffect } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle } from 'lucide-react';
+import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown } from 'lucide-react';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -39,8 +40,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [sharesMap, setSharesMap] = useState<Record<string, number>>({});
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showPaidByDropdown, setShowPaidByDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const categories = ['Food & Dining', 'Transportation', 'Accommodation', 'Utilities', 'Entertainment', 'General'];
 
   useEffect(() => {
     if (members.length > 0) {
@@ -151,13 +156,17 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     }
   };
 
+  const paidByName = members.find((m) => m._id === paidByMemberId)?.name || 'Select member';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-      <div 
-        className="w-full max-w-md bg-white rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto font-sans"
-        style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto font-sans"
       >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden -mt-1 mb-1" />
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
@@ -205,40 +214,69 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Category
               </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:border-emerald-500"
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-semibold flex items-center justify-between cursor-pointer"
               >
-                <option value="Food & Dining">Food & Dining</option>
-                <option value="Transportation">Transportation</option>
-                <option value="Accommodation">Accommodation</option>
-                <option value="Utilities">Utilities</option>
-                <option value="Entertainment">Entertainment</option>
-                <option value="General">General</option>
-              </select>
+                <span className="truncate">{category}</span>
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
+
+              {showCategoryDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setCategory(cat);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
               Paid By *
             </label>
-            <select
-              value={paidByMemberId}
-              onChange={(e) => setPaidByMemberId(e.target.value)}
-              className="w-full px-3 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:border-emerald-500"
+            <button
+              type="button"
+              onClick={() => setShowPaidByDropdown(!showPaidByDropdown)}
+              className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-semibold flex items-center justify-between cursor-pointer"
             >
-              {members.map((m) => (
-                <option key={m._id} value={m._id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+              <span>{paidByName}</span>
+              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+            </button>
+
+            {showPaidByDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
+                {members.map((m) => (
+                  <button
+                    key={m._id}
+                    type="button"
+                    onClick={() => {
+                      setPaidByMemberId(m._id);
+                      setShowPaidByDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 pt-2 border-t border-slate-100">

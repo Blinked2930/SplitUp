@@ -15,10 +15,12 @@ import {
   Wallet,
   ChevronDown,
   ChevronUp,
+  Pencil,
 } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
 import { SettleDebtModal } from './SettleDebtModal';
+import { EditExpenseModal } from './EditExpenseModal';
 import { calculateBalances, simplifyDebts } from '../utils/debtCalculator';
 
 interface GroupDetailViewProps {
@@ -32,6 +34,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showSettle, setShowSettle] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -39,7 +42,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   const [settleTo, setSettleTo] = useState<string | undefined>();
   const [settleAmount, setSettleAmount] = useState<number | undefined>();
 
-  // 1. Calculate net balances and simplified debts
   const balances = useMemo(() => {
     if (!details) return new Map<string, number>();
     return calculateBalances(details.members, details.expenses, details.settlements || []);
@@ -50,21 +52,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     return simplifyDebts(details.members, balances);
   }, [details, balances]);
 
-  // 2. Member Out-of-Pocket Spending Stats
-  const memberSpending = useMemo(() => {
-    if (!details) return new Map<string, number>();
-    const map = new Map<string, number>();
-    details.members.forEach((m: { _id: string }) => map.set(m._id, 0));
-
-    details.expenses.forEach((exp: { paidByMemberId: string; amountInALL: number }) => {
-      const current = map.get(exp.paidByMemberId) ?? 0;
-      map.set(exp.paidByMemberId, current + exp.amountInALL);
-    });
-
-    return map;
-  }, [details]);
-
-  // 3. Category Breakdown Stats
   const categoryTotals = useMemo(() => {
     if (!details) return [];
     const totals: Record<string, number> = {};
@@ -115,7 +102,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
-      {/* Sticky Header */}
       <header
         className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-md"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -189,7 +175,8 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               {simplifiedDebts.map((debt, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between bg-white p-3 rounded-2xl border border-emerald-200/60 shadow-sm text-xs font-medium"
+                  onClick={() => handleQuickSettle(debt.fromMemberId, debt.toMemberId, debt.amountALL)}
+                  className="flex items-center justify-between bg-white p-3 rounded-2xl border border-emerald-200/60 shadow-sm text-xs font-medium cursor-pointer hover:border-emerald-300 transition-colors"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-slate-900">{debt.fromName}</span>
@@ -202,8 +189,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleQuickSettle(debt.fromMemberId, debt.toMemberId, debt.amountALL)}
-                      className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                      className="px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-bold text-[10px]"
                     >
                       Pay
                     </button>
@@ -214,7 +200,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           </div>
         )}
 
-        {/* Total Group Spending & Toggleable Category/Member Breakdown */}
+        {/* Total Group Volume */}
         <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -243,85 +229,25 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           </div>
 
           {showBreakdown && (
-            <div className="pt-3 border-t border-slate-100 space-y-4 animate-in fade-in">
-              {/* Category Breakdown Progress Bars */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Categories
-                </p>
-                {categoryTotals.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No categorized expenses yet.</p>
-                ) : (
-                  categoryTotals.map((cat) => (
-                    <div key={cat.category} className="space-y-1">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-slate-700">{cat.category}</span>
-                        <span className="font-mono text-slate-900">
-                          {cat.amount} {group.currency} ({cat.percentage}%)
-                        </span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                          style={{ width: `${cat.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Individual Out-of-Pocket Total */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Total Paid Out Of Pocket
-                </p>
-                {members.map((m: { _id: string; name: string }) => {
-                  const paidOut = memberSpending.get(m._id) ?? 0;
-                  return (
-                    <div key={m._id} className="flex items-center justify-between text-xs py-0.5">
-                      <span className="font-semibold text-slate-700">{m.name}</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {paidOut} {group.currency}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              {categoryTotals.map((cat) => (
+                <div key={cat.category} className="space-y-1">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">{cat.category}</span>
+                    <span className="font-mono text-slate-900">
+                      {cat.amount} {group.currency} ({cat.percentage}%)
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${cat.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-        </div>
-
-        {/* Member Net Balances */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Member Net Positions
-            </h3>
-            <span className="text-xs text-slate-500 font-medium">{group.currency}</span>
-          </div>
-          <div className="space-y-2">
-            {members.map((m: { _id: string; name: string }) => {
-              const net = Math.round((balances.get(m._id) ?? 0) * 100) / 100;
-              return (
-                <div key={m._id} className="flex items-center justify-between text-sm py-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
-                      {m.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-semibold text-slate-800">{m.name}</span>
-                  </div>
-                  <span
-                    className={`font-mono font-bold text-xs ${
-                      net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
-                    }`}
-                  >
-                    {net > 0 ? `+${net}` : net < 0 ? `${net}` : 'Settled'} {group.currency}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
         {/* Expenses Feed */}
@@ -336,31 +262,31 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               <p className="text-xs text-slate-400">No expenses recorded for this group yet.</p>
             </div>
           ) : (
-            expenses.map(
-              (exp: { _id: string; title: string; amount: number; currency: string; timestamp: number; category?: string }) => (
-                <div
-                  key={exp._id}
-                  className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{exp.title}</h4>
-                      {exp.category && (
-                        <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
-                          {exp.category}
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono font-bold text-slate-900 text-sm">
-                      {exp.amount} {exp.currency}
-                    </span>
+            expenses.map((exp: any) => (
+              <div
+                key={exp._id}
+                onClick={() => setSelectedExpense(exp)}
+                className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2 hover:border-slate-300 transition-all cursor-pointer flex items-center justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm">{exp.title}</h4>
+                    <Pencil className="w-3 h-3 text-slate-300" />
                   </div>
-                  <p className="text-xs text-slate-400 font-medium">
+                  {exp.category && (
+                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
+                      {exp.category}
+                    </span>
+                  )}
+                  <p className="text-[10px] text-slate-400 font-medium mt-1">
                     {new Date(exp.timestamp).toLocaleDateString()}
                   </p>
                 </div>
-              )
-            )
+                <span className="font-mono font-bold text-slate-900 text-sm">
+                  {exp.amount} {exp.currency}
+                </span>
+              </div>
+            ))
           )}
         </div>
       </main>
@@ -388,6 +314,14 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         initialFromMemberId={settleFrom}
         initialToMemberId={settleTo}
         initialAmount={settleAmount}
+      />
+
+      <EditExpenseModal
+        isOpen={!!selectedExpense}
+        onClose={() => setSelectedExpense(null)}
+        expense={selectedExpense}
+        groupCurrency={group.currency}
+        members={members}
       />
     </div>
   );
