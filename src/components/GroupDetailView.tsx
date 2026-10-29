@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { ArrowLeft, Plus, Receipt, UserPlus } from 'lucide-react';
+import { ArrowLeft, Plus, Receipt, UserPlus, Scale, ArrowRight, Share2, Check } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
+import { SettleDebtModal } from './SettleDebtModal';
+import { calculateBalances, simplifyDebts } from '../utils/debtCalculator';
 
 interface GroupDetailViewProps {
   groupId: Id<'groups'>;
@@ -13,8 +15,25 @@ interface GroupDetailViewProps {
 
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
+
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showSettle, setShowSettle] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [settleFrom, setSettleFrom] = useState<string | undefined>();
+  const [settleTo, setSettleTo] = useState<string | undefined>();
+  const [settleAmount, setSettleAmount] = useState<number | undefined>();
+
+  const balances = useMemo(() => {
+    if (!details) return new Map<string, number>();
+    return calculateBalances(details.members, details.expenses, details.settlements || []);
+  }, [details]);
+
+  const simplifiedDebts = useMemo(() => {
+    if (!details) return [];
+    return simplifyDebts(details.members, balances);
+  }, [details, balances]);
 
   if (!details) {
     return (
@@ -26,6 +45,19 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
 
   const { group, members, expenses } = details;
 
+  const handleCopyGroupId = () => {
+    navigator.clipboard.writeText(group._id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleQuickSettle = (fromId: string, toId: string, amount: number) => {
+    setSettleFrom(fromId);
+    setSettleTo(toId);
+    setSettleAmount(amount);
+    setShowSettle(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
       {/* Sticky Header */}
@@ -35,6 +67,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
       >
         <div className="max-w-md mx-auto pb-3 px-4 flex items-center justify-between">
           <button
+            type="button"
             onClick={onBack}
             className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
@@ -44,52 +77,121 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             <h2 className="font-bold text-slate-900 text-base">{group.name}</h2>
             <p className="text-[10px] text-slate-400 font-medium">{members.length} Members</p>
           </div>
-          <div className="w-9" />
+          <button
+            type="button"
+            onClick={handleCopyGroupId}
+            className="p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
+            title="Copy Invite ID"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
+          </button>
         </div>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
         {/* Actions Grid */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => setShowAddExpense(true)}
-            className="py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="py-3 px-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Add Expense</span>
+            <span>Expense</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSettleFrom(undefined);
+              setSettleTo(undefined);
+              setSettleAmount(undefined);
+              setShowSettle(true);
+            }}
+            className="py-3 px-2 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Scale className="w-4 h-4" />
+            <span>Settle</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowAddMember(true)}
-            className="py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-200 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="py-3 px-2 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-200 shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <UserPlus className="w-4 h-4 text-emerald-600" />
-            <span>Add Person</span>
+            <span>Person</span>
           </button>
         </div>
 
-        {/* Members List */}
+        {/* Simplified Debts / Payback Summary */}
+        {simplifiedDebts.length > 0 && (
+          <div className="p-4 rounded-3xl bg-emerald-50/60 border border-emerald-100 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+              Suggested Settlements
+            </h3>
+            <div className="space-y-2">
+              {simplifiedDebts.map((debt, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between bg-white p-3 rounded-2xl border border-emerald-200/60 shadow-sm text-xs font-medium"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-900">{debt.fromName}</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-bold text-slate-900">{debt.toName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-emerald-700">
+                      {debt.amountALL} {group.currency}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSettle(debt.fromMemberId, debt.toMemberId, debt.amountALL)}
+                      className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                    >
+                      Pay
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Members & Net Balances */}
         <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Members ({members.length})</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Member Balances
+            </h3>
             <span className="text-xs text-slate-500 font-medium">{group.currency}</span>
           </div>
           <div className="space-y-2">
-            {members.map((m: { _id: string; name: string }) => (
-              <div key={m._id} className="flex items-center justify-between text-sm py-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">
-                    {m.name.charAt(0).toUpperCase()}
+            {members.map((m: { _id: string; name: string }) => {
+              const net = Math.round((balances.get(m._id) ?? 0) * 100) / 100;
+              return (
+                <div key={m._id} className="flex items-center justify-between text-sm py-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs">
+                      {m.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-semibold text-slate-800">{m.name}</span>
                   </div>
-                  <span className="font-semibold text-slate-800">{m.name}</span>
+                  <span
+                    className={`font-mono font-bold text-xs ${
+                      net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
+                    }`}
+                  >
+                    {net > 0 ? `+${net}` : net < 0 ? `${net}` : 'Settled'} {group.currency}
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
-        {/* Expenses List */}
+        {/* Expenses Feed */}
         <div className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
             Expenses ({expenses.length})
@@ -101,22 +203,24 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               <p className="text-xs text-slate-400">No expenses recorded for this group yet.</p>
             </div>
           ) : (
-            expenses.map((exp: { _id: string; title: string; amount: number; currency: string; timestamp: number }) => (
-              <div
-                key={exp._id}
-                className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 text-sm">{exp.title}</h4>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {exp.amount} {exp.currency}
-                  </span>
+            expenses.map(
+              (exp: { _id: string; title: string; amount: number; currency: string; timestamp: number }) => (
+                <div
+                  key={exp._id}
+                  className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-slate-900 text-sm">{exp.title}</h4>
+                    <span className="font-mono font-bold text-slate-900 text-sm">
+                      {exp.amount} {exp.currency}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {new Date(exp.timestamp).toLocaleDateString()}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-400 font-medium">
-                  {new Date(exp.timestamp).toLocaleDateString()}
-                </p>
-              </div>
-            ))
+              )
+            )
           )}
         </div>
       </main>
@@ -133,6 +237,17 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         isOpen={showAddMember}
         onClose={() => setShowAddMember(false)}
         groupId={groupId}
+      />
+
+      <SettleDebtModal
+        isOpen={showSettle}
+        onClose={() => setShowSettle(false)}
+        groupId={groupId}
+        groupCurrency={group.currency}
+        members={members}
+        initialFromMemberId={settleFrom}
+        initialToMemberId={settleTo}
+        initialAmount={settleAmount}
       />
     </div>
   );
