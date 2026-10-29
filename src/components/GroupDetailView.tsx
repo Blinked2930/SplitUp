@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { ArrowLeft, Plus, Receipt } from 'lucide-react';
+import { ArrowLeft, Plus, Receipt, UserPlus } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
+import { AddMemberModal } from './AddMemberModal';
 
 interface GroupDetailViewProps {
   groupId: Id<'groups'>;
@@ -13,6 +14,7 @@ interface GroupDetailViewProps {
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
 
   if (!details) {
     return (
@@ -34,7 +36,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         <div className="max-w-md mx-auto pb-3 px-4 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -47,27 +49,37 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
-        {/* Quick Add Expense Action */}
-        <button
-          type="button"
-          onClick={() => setShowAddExpense(true)}
-          className="w-full py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 text-emerald-400" />
-          <span>Add Expense</span>
-        </button>
+        {/* Actions Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAddExpense(true)}
+            className="py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-emerald-400" />
+            <span>Add Expense</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddMember(true)}
+            className="py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs border border-slate-200 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4 text-emerald-600" />
+            <span>Add Person</span>
+          </button>
+        </div>
 
         {/* Members List */}
         <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Members</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Members ({members.length})</h3>
             <span className="text-xs text-slate-500 font-medium">{group.currency}</span>
           </div>
           <div className="space-y-2">
             {members.map((m: { _id: string; name: string }) => (
               <div key={m._id} className="flex items-center justify-between text-sm py-1">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">
                     {m.name.charAt(0).toUpperCase()}
                   </div>
                   <span className="font-semibold text-slate-800">{m.name}</span>
@@ -115,6 +127,12 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         groupId={groupId}
         groupCurrency={group.currency}
         members={members}
+      />
+
+      <AddMemberModal
+        isOpen={showAddMember}
+        onClose={() => setShowAddMember(false)}
+        groupId={groupId}
       />
     </div>
   );

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { X, Users, Plus, Trash2, Check } from 'lucide-react';
+import { X, Users, Plus, Trash2, Check, Loader2 } from 'lucide-react';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (groupId: string) => void;
 }
 
-export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose }) => {
-  const createGroupMutation = useMutation((api as any).groups?.createGroup);
+export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const createGroupMutation = useMutation((api as any).groups?.createGroup || (api as any).groups?.create);
 
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
@@ -38,11 +39,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
 
     setIsSubmitting(true);
     try {
-      await createGroupMutation({
+      const res = await createGroupMutation({
         name: groupName.trim(),
         currency,
         description: description.trim() || undefined,
         memberName: yourName.trim(),
+        additionalMembers: members,
       });
 
       setGroupName('');
@@ -50,8 +52,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
       setYourName('');
       setMembers([]);
       onClose();
+
+      if (onSuccess && res?.groupId) {
+        onSuccess(res.groupId);
+      }
     } catch (err) {
       console.error('Failed to create group:', err);
+      alert('Error creating group. Make sure your Convex backend is running.');
     } finally {
       setIsSubmitting(false);
     }
@@ -59,7 +66,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto font-sans">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
@@ -136,7 +143,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
 
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Initial Members
+              Add Roommates / Members
             </label>
             <div className="flex gap-2">
               <input
@@ -187,8 +194,12 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
             disabled={isSubmitting || !groupName.trim() || !yourName.trim()}
             className="w-full py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
           >
-            <Check className="w-4 h-4" />
-            <span>{isSubmitting ? 'Creating...' : 'Create Group'}</span>
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            <span>{isSubmitting ? 'Creating Group...' : 'Create Group'}</span>
           </button>
         </form>
       </div>
