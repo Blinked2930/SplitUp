@@ -1,3 +1,4 @@
+// src/components/Dashboard.tsx
 import React, { useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -15,6 +16,7 @@ import {
   Scale,
   Settings as SettingsIcon,
   CheckCircle2,
+  Wallet,
 } from 'lucide-react';
 import { BottomNav, SplitTab } from './BottomNav';
 import { CreateGroupModal } from './CreateGroupModal';
@@ -61,7 +63,9 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Overall Net Position</p>
-              <h2 className="text-2xl font-black text-slate-900 font-mono mt-0.5">0 ALL</h2>
+              <h2 className="text-2xl font-black text-slate-900 font-mono mt-0.5">
+                0 ALL
+              </h2>
             </div>
             <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
               <Sparkles className="w-5 h-5" />
@@ -208,14 +212,48 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 3: BALANCES */}
+        {/* TAB 3: CROSS-GROUP BALANCES */}
         {activeTab === 'balances' && (
-          <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-3 animate-in fade-in">
-            <Scale className="w-8 h-8 text-emerald-500 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-900">All Debts Settled</h3>
-            <p className="text-xs text-slate-400 max-w-xs mx-auto">
-              You are currently even across all your shared groups. No pending payments needed.
-            </p>
+          <div className="space-y-3 animate-in fade-in">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
+              Balances Per Group
+            </h3>
+
+            {groups === undefined ? (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200 flex justify-center items-center">
+                <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+              </div>
+            ) : groups.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
+                <Scale className="w-6 h-6 text-slate-300 mx-auto" />
+                <p className="text-xs text-slate-400">Join or create a group to view balances.</p>
+              </div>
+            ) : (
+              groups.map((g: any) => (
+                <div
+                  key={g._id}
+                  onClick={() => setSelectedGroupId(g._id)}
+                  className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">{g.name}</h4>
+                      <p className="text-[10px] text-slate-400 font-medium">Currency: {g.currency}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-xl">
+                      Active
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -251,7 +289,7 @@ export const Dashboard: React.FC = () => {
       <CreateGroupModal
         isOpen={showCreateGroup}
         onClose={() => setShowCreateGroup(false)}
-        onSuccess={(id) => setSelectedGroupId(id as any)}
+        onSuccess={(id: any) => setSelectedGroupId(id)}
       />
 
       <JoinGroupModal
