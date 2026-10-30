@@ -17,7 +17,6 @@ import { BottomNav, SplitTab } from './BottomNav';
 import { CreateGroupModal } from './CreateGroupModal';
 import { JoinGroupModal } from './JoinGroupModal';
 import { GroupDetailView } from './GroupDetailView';
-import { GlobalBalancesView } from './GlobalBalancesView';
 import { ActivityFeedView } from './ActivityFeedView';
 import { formatCurrency } from '../utils/currencies';
 
@@ -71,7 +70,7 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 pb-28 font-sans">
       <header
         className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-md"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -87,59 +86,58 @@ export const Dashboard: React.FC = () => {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
-        {activeTab === 'groups' && (
-          <div className="space-y-4 animate-in fade-in">
-            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Overall Net Position
-                  </p>
-                  <h2
-                    className={`text-2xl font-black font-mono mt-0.5 ${
-                      overallNetPosition > 0
-                        ? 'text-emerald-600'
-                        : overallNetPosition < 0
-                        ? 'text-rose-600'
-                        : 'text-slate-900'
-                    }`}
-                  >
-                    {overallNetPosition > 0 ? '+' : ''}
-                    {formatCurrency(overallNetPosition, 'ALL')}
-                  </h2>
-                </div>
-                <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
-                  <Sparkles className="w-5 h-5" />
-                </div>
+        {/* Overall Balance Summary Card */}
+        <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Overall Net Position</p>
+              <h2
+                className={`text-2xl font-black font-mono mt-0.5 ${
+                  overallNetPosition > 0
+                    ? 'text-emerald-600'
+                    : overallNetPosition < 0
+                    ? 'text-rose-600'
+                    : 'text-slate-900'
+                }`}
+              >
+                {overallNetPosition > 0 ? '+' : ''}
+                {formatCurrency(overallNetPosition, 'ALL')}
+              </h2>
+            </div>
+            <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
+              <Sparkles className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-emerald-50/60 border border-emerald-100">
+              <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-700">
+                <ArrowDownLeft className="w-4 h-4" />
               </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-emerald-50/60 border border-emerald-100">
-                  <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-700">
-                    <ArrowDownLeft className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-500 font-medium">You get back</p>
-                    <p className="text-xs font-bold text-emerald-700 font-mono">
-                      {formatCurrency(totalReceivableALL, 'ALL')}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100">
-                  <div className="p-1.5 rounded-xl bg-rose-100 text-rose-700">
-                    <ArrowUpRight className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-500 font-medium">You owe</p>
-                    <p className="text-xs font-bold text-rose-700 font-mono">
-                      {formatCurrency(totalPayableALL, 'ALL')}
-                    </p>
-                  </div>
-                </div>
+              <div>
+                <p className="text-[10px] text-slate-500 font-medium">You get back</p>
+                <p className="text-xs font-bold text-emerald-700 font-mono">
+                  {formatCurrency(totalReceivableALL, 'ALL')}
+                </p>
               </div>
             </div>
 
+            <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100">
+              <div className="p-1.5 rounded-xl bg-rose-100 text-rose-700">
+                <ArrowUpRight className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-500 font-medium">You owe</p>
+                <p className="text-xs font-bold text-rose-700 font-mono">
+                  {formatCurrency(totalPayableALL, 'ALL')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {activeTab === 'groups' && (
+          <div className="space-y-4 animate-in fade-in">
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -164,9 +162,7 @@ export const Dashboard: React.FC = () => {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Your Groups
-                </h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Your Groups</h3>
                 <span className="text-xs text-slate-500 font-medium">
                   {groups ? `${groups.length} Active` : 'Loading...'}
                 </span>
@@ -179,9 +175,7 @@ export const Dashboard: React.FC = () => {
               ) : groups.length === 0 ? (
                 <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
                   <p className="text-sm font-bold text-slate-700">No groups yet</p>
-                  <p className="text-xs text-slate-400">
-                    Create or join a group to start splitting expenses.
-                  </p>
+                  <p className="text-xs text-slate-400">Create or join a group to start splitting expenses.</p>
                 </div>
               ) : (
                 groups.map((group: any) => {
@@ -201,9 +195,7 @@ export const Dashboard: React.FC = () => {
                           </div>
                           <div>
                             <h4 className="font-bold text-slate-900 text-sm">{group.name}</h4>
-                            <p className="text-xs text-slate-400 font-medium">
-                              {group.currency || 'ALL'}
-                            </p>
+                            <p className="text-xs text-slate-400 font-medium">{group.currency || 'ALL'}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -260,10 +252,6 @@ export const Dashboard: React.FC = () => {
 
         {activeTab === 'activity' && (
           <ActivityFeedView onSelectGroup={(id) => setSelectedGroupId(id as any)} />
-        )}
-
-        {activeTab === 'balances' && (
-          <GlobalBalancesView onSelectGroup={(id) => setSelectedGroupId(id as any)} />
         )}
       </main>
 
