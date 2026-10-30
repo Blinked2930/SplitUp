@@ -10,6 +10,19 @@ function generateInviteCode(): string {
   return result;
 }
 
+// Shared currency validator — keep this list in sync with GLOBAL_CURRENCIES
+// in src/utils/currencies.ts.
+const currencyValidator = v.union(
+  v.literal("ALL"),
+  v.literal("EUR"),
+  v.literal("USD"),
+  v.literal("GBP"),
+  v.literal("CHF"),
+  v.literal("CAD"),
+  v.literal("AUD"),
+  v.literal("JPY")
+);
+
 // ---------------------------------------------------------------------------
 // QUERIES
 // ---------------------------------------------------------------------------
@@ -229,10 +242,8 @@ export const getUnclaimedMembers = query({
 export const createGroup = mutation({
   args: {
     name: v.string(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-    allowedCurrencies: v.optional(
-      v.array(v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")))
-    ),
+    currency: currencyValidator,
+    allowedCurrencies: v.optional(v.array(currencyValidator)),
     description: v.optional(v.string()),
     memberName: v.string(),
     additionalMembers: v.optional(v.array(v.string())),
@@ -245,7 +256,7 @@ export const createGroup = mutation({
 
     const groupData: {
       name: string;
-      currency: "ALL" | "EUR" | "USD";
+      currency: string;
       allowedCurrencies: string[];
       description?: string;
       createdBy: string;
@@ -294,10 +305,8 @@ export const updateGroupSettings = mutation({
   args: {
     groupId: v.id("groups"),
     name: v.string(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-    allowedCurrencies: v.array(
-      v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD"))
-    ),
+    currency: currencyValidator,
+    allowedCurrencies: v.array(currencyValidator),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.groupId, {
@@ -405,7 +414,7 @@ export const addExpense = mutation({
     groupId: v.id("groups"),
     title: v.string(),
     amount: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: currencyValidator,
     amountInALL: v.number(),
     category: v.optional(v.string()),
     paidByMemberId: v.id("groupMembers"),
@@ -449,7 +458,7 @@ export const updateExpense = mutation({
     expenseId: v.id("groupExpenses"),
     title: v.string(),
     amount: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: currencyValidator,
     amountInALL: v.number(),
     category: v.optional(v.string()),
     paidByMemberId: v.id("groupMembers"),
@@ -487,7 +496,7 @@ export const settleGroupDebt = mutation({
     fromUserId: v.optional(v.string()),
     toUserId: v.optional(v.string()),
     amountALL: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: currencyValidator,
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
