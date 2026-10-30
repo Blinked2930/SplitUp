@@ -13,8 +13,10 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Smooth mobile scrolling & overscroll behavior */
-  html, body {
+  /* Keep horizontal overflow contained on body only.
+     Do NOT put overflow-x: hidden on <html> — it implicitly sets
+     overflow-y: auto on <html>, which traps scrolling in iOS PWA mode. */
+  body {
     overflow-x: hidden;
     overscroll-behavior-y: none;
   }
@@ -41,4 +43,3 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-
