@@ -3,6 +3,7 @@ import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown, RefreshCw } from 'lucide-react';
+import { fetchExchangeRate } from '../utils/currencies';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -13,21 +14,12 @@ interface AddExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   groupId: Id<'groups'>;
-  groupCurrency: 'ALL' | 'EUR' | 'USD';
-  allowedCurrencies?: Array<'ALL' | 'EUR' | 'USD'>;
+  groupCurrency: string;
+  allowedCurrencies?: string[];
   members: Member[];
 }
 
 type SplitMode = 'equal' | 'exact' | 'shares';
-
-const DEFAULT_RATES: Record<string, number> = {
-  EUR_ALL: 100,
-  USD_ALL: 90,
-  ALL_EUR: 0.01,
-  ALL_USD: 0.011,
-  EUR_USD: 1.08,
-  USD_EUR: 0.92,
-};
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
@@ -43,7 +35,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
-  const [selectedCurrency, setSelectedCurrency] = useState<'ALL' | 'EUR' | 'USD'>(groupCurrency);
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(groupCurrency);
   const [customFxRate, setCustomFxRate] = useState<string>('1');
   const [category, setCategory] = useState('General');
   const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?._id ?? '');
@@ -59,6 +51,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const categories = ['Food & Dining', 'Transportation', 'Accommodation', 'Utilities', 'Entertainment', 'General'];
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedCurrency(groupCurrency);
+    }
+  }, [isOpen, groupCurrency]);
 
   useEffect(() => {
     if (members.length > 0) {
@@ -80,9 +78,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     if (selectedCurrency === groupCurrency) {
       setCustomFxRate('1');
     } else {
-      const pair = `${selectedCurrency}_${groupCurrency}`;
-      const defaultRate = DEFAULT_RATES[pair] || 1;
-      setCustomFxRate(defaultRate.toString());
+      fetchExchangeRate(selectedCurrency, groupCurrency).then((rate: number) => {
+        setCustomFxRate(rate.toString());
+      });
     }
   }, [selectedCurrency, groupCurrency]);
 
@@ -254,7 +252,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             </div>
           </div>
 
-          {/* FX Conversion Line if different from base currency */}
           {selectedCurrency !== groupCurrency && (
             <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2 text-xs">
               <div className="flex items-center justify-between font-bold text-amber-900">
@@ -480,7 +477,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           </button>
         </form>
 
-        {/* Currency Popover */}
         {showCurrencyPopover && (
           <div
             onClick={() => setShowCurrencyPopover(false)}
@@ -493,7 +489,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
                 Allowed Currencies
               </h4>
-              <div className="space-y-1">
+              <div className="space-y-1 max-h-60 overflow-y-auto">
                 {allowedCurrencies.map((c) => (
                   <button
                     key={c}
@@ -517,7 +513,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           </div>
         )}
 
-        {/* Category Popover */}
         {showCategoryPopover && (
           <div
             onClick={() => setShowCategoryPopover(false)}
@@ -554,7 +549,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
           </div>
         )}
 
-        {/* Paid By Popover */}
         {showPaidByPopover && (
           <div
             onClick={() => setShowPaidByPopover(false)}
