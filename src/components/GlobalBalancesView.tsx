@@ -1,4 +1,3 @@
-// src/components/GlobalBalancesView.tsx
 import React from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -18,25 +17,32 @@ interface GlobalBalancesViewProps {
 }
 
 export const GlobalBalancesView: React.FC<GlobalBalancesViewProps> = ({ onSelectGroup }) => {
-  const groups = useQuery((api as any).groups?.getMyGroups) || [];
+  const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups) || [];
   const isLoading = groups === undefined;
 
   let totalReceivableALL = 0;
   let totalPayableALL = 0;
 
-  const groupSummaries = groups.map((group: any) => {
-    const netBalance = group.myNetBalanceALL || 0;
+  const groupSummaries = (Array.isArray(groups) ? groups : []).map((group: any) => {
+    const netBalance = group.myNetBalanceALL ?? group.netBalanceALL ?? group.netBalance ?? 0;
     if (netBalance > 0) {
       totalReceivableALL += netBalance;
     } else if (netBalance < 0) {
       totalPayableALL += Math.abs(netBalance);
     }
 
+    const memberCount =
+      group.memberCount ??
+      group.membersCount ??
+      group.members?.length ??
+      group.memberIds?.length ??
+      1;
+
     return {
       id: group._id,
       name: group.name,
       currency: group.currency || 'ALL',
-      memberCount: group.members?.length || 0,
+      memberCount,
       netBalance,
     };
   });
@@ -45,7 +51,7 @@ export const GlobalBalancesView: React.FC<GlobalBalancesViewProps> = ({ onSelect
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 space-y-3">
+      <div className="flex flex-col items-center justify-center py-16 space-y-3 font-sans">
         <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
         <p className="text-xs text-slate-400 font-medium">Calculating cross-group balances…</p>
       </div>
@@ -53,7 +59,7 @@ export const GlobalBalancesView: React.FC<GlobalBalancesViewProps> = ({ onSelect
   }
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-4 font-sans">
+    <div className="w-full max-w-md mx-auto space-y-4 font-sans animate-in fade-in">
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/50 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -62,7 +68,9 @@ export const GlobalBalancesView: React.FC<GlobalBalancesViewProps> = ({ onSelect
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">Global Net Position</h3>
-              <p className="text-[10px] text-slate-400">Across {groups.length} active group{groups.length === 1 ? '' : 's'}</p>
+              <p className="text-[10px] text-slate-400">
+                Across {groupSummaries.length} active group{groupSummaries.length === 1 ? '' : 's'}
+              </p>
             </div>
           </div>
           <div className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-mono text-xs font-bold flex items-center gap-1">
@@ -91,9 +99,9 @@ export const GlobalBalancesView: React.FC<GlobalBalancesViewProps> = ({ onSelect
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
             {netPosition > 0
-              ? 'You are owed more overall than you owe across your trips.'
+              ? 'You are owed more overall than you owe across your trip groups.'
               : netPosition < 0
-              ? 'You have outstanding debts across your active groups.'
+              ? 'You have outstanding debts across your active trip groups.'
               : 'You are completely settled up in all active groups!'}
           </p>
         </div>
