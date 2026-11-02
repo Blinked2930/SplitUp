@@ -1,5 +1,6 @@
+// src/components/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import {
@@ -12,6 +13,8 @@ import {
   Loader2,
   Share2,
   Check,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 import { BottomNav, SplitTab } from './BottomNav';
 import { CreateGroupModal } from './CreateGroupModal';
@@ -25,10 +28,15 @@ export const Dashboard: React.FC = () => {
   const [selectedGroupId, setSelectedGroupId] = useState<Id<'groups'> | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [deepLinkCode, setDeepLinkCode] = useState<string | undefined>(undefined);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
+  const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {
+    includeArchived: true,
+  });
+
+  const unarchiveGroupMutation = useMutation((api as any).groups?.unarchiveGroup);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -47,14 +55,27 @@ export const Dashboard: React.FC = () => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const handleUnarchive = async (e: React.MouseEvent, groupId: Id<'groups'>) => {
+    e.stopPropagation();
+    await unarchiveGroupMutation({ groupId });
+  };
+
   let totalReceivableALL = 0;
   let totalPayableALL = 0;
 
+  const activeGroups: any[] = [];
+  const archivedGroups: any[] = [];
+
   if (Array.isArray(groups)) {
     for (const group of groups) {
-      const net = group.myNetBalanceALL ?? group.netBalanceALL ?? group.netBalance ?? 0;
-      if (net > 0) totalReceivableALL += net;
-      else if (net < 0) totalPayableALL += Math.abs(net);
+      if (group.status === 'archived') {
+        archivedGroups.push(group);
+      } else {
+        activeGroups.push(group);
+        const net = group.myNetBalanceALL ?? group.netBalanceALL ?? group.netBalance ?? 0;
+        if (net > 0) totalReceivableALL += net;
+        else if (net < 0) totalPayableALL += Math.abs(net);
+      }
     }
   }
 
@@ -164,7 +185,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Your Groups</h3>
                 <span className="text-xs text-slate-500 font-medium">
-                  {groups ? `${groups.length} Active` : 'Loading...'}
+                  {groups ? `${activeGroups.length} Active` : 'Loading...'}
                 </span>
               </div>
 
@@ -172,13 +193,13 @@ export const Dashboard: React.FC = () => {
                 <div className="p-8 rounded-3xl bg-white border border-slate-200 flex justify-center items-center">
                   <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
                 </div>
-              ) : groups.length === 0 ? (
+              ) : activeGroups.length === 0 ? (
                 <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
-                  <p className="text-sm font-bold text-slate-700">No groups yet</p>
+                  <p className="text-sm font-bold text-slate-700">No active groups</p>
                   <p className="text-xs text-slate-400">Create or join a group to start splitting expenses.</p>
                 </div>
               ) : (
-                groups.map((group: any) => {
+                activeGroups.map((group: any) => {
                   const displayCode = group.inviteCode || group._id.slice(-6).toUpperCase();
                   const net = group.myNetBalanceALL ?? group.netBalanceALL ?? group.netBalance ?? 0;
 
@@ -245,6 +266,44 @@ export const Dashboard: React.FC = () => {
                     </div>
                   );
                 })
+              )}
+
+              {archivedGroups.length > 0 && (
+                <div className="pt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="flex items-center justify-between w-full text-xs font-bold text-slate-400 uppercase tracking-wider px-1 cursor-pointer hover:text-slate-600"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Archive className="w-3.5 h-3.5" />
+                      Archived Groups ({archivedGroups.length})
+                    </span>
+                    <span>{showArchived ? 'Hide' : 'Show'}</span>
+                  </button>
+
+                  {showArchived &&
+                    archivedGroups.map((group: any) => (
+                      <div
+                        key={group._id}
+                        onClick={() => setSelectedGroupId(group._id)}
+                        className="p-3.5 rounded-2xl bg-slate-100/80 border border-slate-200 text-slate-500 flex items-center justify-between cursor-pointer hover:bg-slate-100"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Archive className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-bold text-slate-700">{group.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => handleUnarchive(e, group._id)}
+                          className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                </div>
               )}
             </div>
           </div>

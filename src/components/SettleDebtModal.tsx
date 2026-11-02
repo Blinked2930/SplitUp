@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { X, Scale, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { X, Scale, Check, ChevronDown, Loader2, Banknote, Wallet } from 'lucide-react';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -36,6 +36,7 @@ export const SettleDebtModal: React.FC<SettleDebtModalProps> = ({
   const [fromMemberId, setFromMemberId] = useState<string>(members[0]?._id ?? '');
   const [toMemberId, setToMemberId] = useState<string>(members[1]?._id ?? members[0]?._id ?? '');
   const [amount, setAmount] = useState<string>('');
+  const [paidWith, setPaidWith] = useState<'Cash' | 'Card'>('Cash');
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,6 +76,7 @@ export const SettleDebtModal: React.FC<SettleDebtModalProps> = ({
         toMemberId: toMemberId as Id<'groupMembers'>,
         amountALL: numAmount,
         currency: groupCurrency,
+        paidWith,
       });
 
       onClose();
@@ -192,6 +194,38 @@ export const SettleDebtModal: React.FC<SettleDebtModalProps> = ({
               onChange={(e) => setAmount(e.target.value)}
               className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-mono text-sm font-bold focus:outline-none focus:border-emerald-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Payment Method (Syncs to LekFlow) *
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaidWith('Cash')}
+                className={`flex items-center justify-center gap-2 py-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                  paidWith === 'Cash'
+                    ? 'bg-teal-50 border-teal-500 text-teal-700 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <Banknote className="w-4 h-4" />
+                <span>Physical Cash</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaidWith('Card')}
+                className={`flex items-center justify-center gap-2 py-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                  paidWith === 'Card'
+                    ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <Wallet className="w-4 h-4" />
+                <span>Bank / Card</span>
+              </button>
+            </div>
           </div>
 
           {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
