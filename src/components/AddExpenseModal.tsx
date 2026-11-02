@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
-import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown, RefreshCw } from 'lucide-react';
+import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown, RefreshCw, Trash2 } from 'lucide-react';
 import { fetchExchangeRate } from '../utils/currencies';
 
 interface Member {
@@ -60,6 +60,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 }) => {
   const addExpenseMutation = useMutation((api as any).groups?.addExpense || (api as any).groups?.addGroupExpense);
   const updateExpenseMutation = useMutation((api as any).groups?.updateExpense);
+  const deleteExpenseMutation = useMutation((api as any).groups?.deleteExpense);
 
   const [title, setTitle] = useState(initialExpense?.title || initialExpense?.description || '');
   const [amount, setAmount] = useState(initialExpense ? String(initialExpense.amount) : '');
@@ -76,6 +77,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const [showPaidByPopover, setShowPaidByPopover] = useState(false);
   const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const categories = ['Food & Dining', 'Transportation', 'Accommodation', 'Utilities', 'Entertainment', 'General'];
@@ -146,6 +148,24 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   const totalShares = selectedMemberIds.reduce((sum, id) => {
     return sum + (sharesMap[id] || 1);
   }, 0);
+
+  const handleDeleteFromModal = async () => {
+    const expId = initialExpense?._id || initialExpense?.id;
+    if (!expId) return;
+
+    if (window.confirm('Are you sure you want to delete this expense?')) {
+      setIsDeleting(true);
+      try {
+        await deleteExpenseMutation({ expenseId: expId as Id<'groupExpenses'> });
+        onClose();
+      } catch (err) {
+        console.error('Failed to delete expense:', err);
+        setErrorMsg('Failed to delete expense. Please try again.');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,13 +270,26 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               {initialExpense ? 'Edit Group Expense' : 'Add Group Expense'}
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {initialExpense && (
+              <button
+                type="button"
+                onClick={handleDeleteFromModal}
+                disabled={isDeleting}
+                className="p-1.5 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                title="Delete expense"
+              >
+                <Trash2 className="w-5 h-5 text-rose-500" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -522,7 +555,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
           <button
             type="submit"
-            disabled={isSubmitting || !title.trim() || numAmount <= 0}
+            disabled={isSubmitting || isDeleting || !title.trim() || numAmount <= 0}
             className="w-full py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
           >
             <Check className="w-4 h-4" />

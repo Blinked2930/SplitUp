@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import {
@@ -17,8 +17,6 @@ import {
   ChevronUp,
   Settings2,
   Users,
-  Pencil,
-  Trash2,
 } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
@@ -36,7 +34,6 @@ type GroupTab = 'transactions' | 'balances';
 
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
-  const deleteExpenseMutation = useMutation((api as any).groups?.deleteExpense);
 
   const [activeTab, setActiveTab] = useState<GroupTab>('transactions');
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -151,17 +148,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     setSettleTo(toId);
     setSettleAmount(amountALL);
     setShowSettle(true);
-  };
-
-  const handleDeleteExpense = async (e: React.MouseEvent, expenseId: string) => {
-    e.stopPropagation();
-    if (window.confirm('Delete this group expense?')) {
-      try {
-        await deleteExpenseMutation({ expenseId: expenseId as Id<'groupExpenses'> });
-      } catch (err) {
-        console.error('Failed to delete expense:', err);
-      }
-    }
   };
 
   return (
@@ -365,7 +351,11 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                   return (
                     <div
                       key={exp._id}
-                      className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
+                      onClick={() => {
+                        setEditingExpense(exp);
+                        setShowAddExpense(true);
+                      }}
+                      className="p-4 rounded-3xl bg-white border border-slate-200 hover:border-slate-300 shadow-sm space-y-2 cursor-pointer transition-all"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
@@ -388,27 +378,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                               ≈ {fmtGroup(exp.amountInALL)}
                             </div>
                           )}
-                          <div className="flex items-center justify-end gap-1 mt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingExpense(exp);
-                                setShowAddExpense(true);
-                              }}
-                              className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                              title="Edit expense"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteExpense(e, exp._id)}
-                              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                              title="Delete expense"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
                         </div>
                       </div>
                       <p className="text-[10px] text-slate-400 font-mono">
