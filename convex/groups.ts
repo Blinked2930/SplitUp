@@ -36,18 +36,64 @@ export const getMyGroups = query({
     const userId = identity?.subject ?? args.userId ?? "anonymous";
 
     const allMembers = await ctx.db.query("groupMembers").collect();
-    const memberRecords = allMembers.filter(
+    const myMemberRecords = allMembers.filter(
       (m) => m.userId === userId || (!m.userId && userId === "anonymous")
     );
 
-    const groupIds = memberRecords.map((m) => m.groupId);
+    const groups: any[] = [];
 
-    const groups = [];
-    for (const groupId of groupIds) {
-      const group = await ctx.db.get(groupId);
-      if (group && !group.deleted) {
-        groups.push(group);
+    for (const memberRow of myMemberRecords) {
+      const group = await ctx.db.get(memberRow.groupId);
+      if (!group || group.deleted) continue;
+
+      const members = await ctx.db
+        .query("groupMembers")
+        .filter((q) => q.eq(q.field("groupId"), memberRow.groupId))
+        .collect();
+
+      const expenses = await ctx.db
+        .query("groupExpenses")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), memberRow.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      const settlements = await ctx.db
+        .query("groupSettlements")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), memberRow.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      // Compute this user's net position for this group.
+      // Same math as debtCalculator.calculateBalances:
+      //   payer  → +amountInALL
+      //   splitter → −amountALL
+      //   settlement sender → +amountALL
+      //   settlement receiver → −amountALL
+      let net = 0;
+      for (const exp of expenses) {
+        if (exp.paidByMemberId === memberRow._id) net += exp.amountInALL;
+        for (const split of exp.splits) {
+          if (split.memberId === memberRow._id) net -= split.amountALL;
+        }
       }
+      for (const set of settlements) {
+        if (set.fromMemberId === memberRow._id) net += set.amountALL;
+        if (set.toMemberId === memberRow._id) net -= set.amountALL;
+      }
+
+      groups.push({
+        ...group,
+        memberCount: members.length,
+        myNetBalanceALL: Math.round(net),
+      });
     }
 
     return groups.sort((a, b) => b.createdAt - a.createdAt);
@@ -126,6 +172,9 @@ export const getActivityFeed = query({
       title: string;
       amount: number;
       currency: string;
+      category?: string;
+      paidByMemberId?: string;
+      splitType?: string;
       timestamp: number;
       actorName: string;
     }> = [];
@@ -160,6 +209,9 @@ export const getActivityFeed = query({
           title: exp.title,
           amount: exp.amount,
           currency: exp.currency,
+          category: exp.category,
+          paidByMemberId: exp.paidByMemberId,
+          splitType: exp.splitType,
           timestamp: exp.timestamp,
           actorName: memberMap.get(exp.paidByMemberId) ?? "Someone",
         });

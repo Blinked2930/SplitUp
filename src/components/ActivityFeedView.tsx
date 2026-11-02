@@ -1,6 +1,5 @@
-// src/components/ActivityFeedView.tsx
-import React from 'react';
-import { useQuery } from 'convex/react';
+import React, { useState } from 'react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Activity,
@@ -10,8 +9,11 @@ import {
   Loader2,
   Clock,
   ChevronRight,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { formatCurrency } from '../utils/currencies';
+import { AddExpenseModal } from './AddExpenseModal';
 
 interface ActivityFeedViewProps {
   onSelectGroup: (groupId: string) => void;
@@ -19,7 +21,26 @@ interface ActivityFeedViewProps {
 
 export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({ onSelectGroup }) => {
   const activityData = useQuery((api as any).groups?.getActivityFeed) || [];
+  const deleteExpenseMutation = useMutation((api as any).groups?.deleteExpense);
   const isLoading = activityData === undefined;
+
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
+
+  const handleDelete = async (e: React.MouseEvent, expenseId: string) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this expense?')) {
+      try {
+        await deleteExpenseMutation({ expenseId });
+      } catch (err) {
+        console.error('Failed to delete expense:', err);
+      }
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, act: any) => {
+    e.stopPropagation();
+    setEditingExpense(act);
+  };
 
   if (isLoading) {
     return (
@@ -57,10 +78,11 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({ onSelectGrou
           {activityData.map((act: any) => {
             const isSettlement = act.type === 'settlement';
             const isMemberJoin = act.type === 'member_join';
+            const isExpense = act.type === 'expense';
 
             return (
-              <button
-                key={act._id || act.timestamp}
+              <div
+                key={act.id || act._id || act.timestamp}
                 onClick={() => act.groupId && onSelectGroup(act.groupId)}
                 className="w-full p-4 rounded-2xl bg-white border border-slate-200 shadow-sm hover:border-slate-300 transition-all text-left flex items-start gap-3 group cursor-pointer"
               >
@@ -93,14 +115,17 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({ onSelectGrou
                   </div>
 
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    {act.description}
+                    {act.title || act.description}
                   </p>
 
                   {act.amount !== undefined && (
-                    <div className="flex items-center gap-1 pt-0.5">
+                    <div className="flex items-center gap-1.5 pt-0.5">
                       <span className="text-xs font-mono font-bold text-slate-900">
                         {formatCurrency(act.amount, act.currency || 'ALL')}
                       </span>
+                      {act.actorName && (
+                        <span className="text-[10px] text-slate-400">by {act.actorName}</span>
+                      )}
                       {act.category && (
                         <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-semibold">
                           {act.category}
@@ -110,11 +135,44 @@ export const ActivityFeedView: React.FC<ActivityFeedViewProps> = ({ onSelectGrou
                   )}
                 </div>
 
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors shrink-0 self-center" />
-              </button>
+                <div className="flex items-center gap-1 shrink-0 self-center">
+                  {isExpense && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleEdit(e, act)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        title="Edit Expense"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(e, act.id || act._id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Delete Expense"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 transition-colors" />
+                </div>
+              </div>
             );
           })}
         </div>
+      )}
+
+      {editingExpense && (
+        <AddExpenseModal
+          isOpen={Boolean(editingExpense)}
+          onClose={() => setEditingExpense(null)}
+          groupId={editingExpense.groupId}
+          groupCurrency={editingExpense.currency || 'ALL'}
+          members={[]}
+          initialExpense={editingExpense}
+        />
       )}
     </div>
   );

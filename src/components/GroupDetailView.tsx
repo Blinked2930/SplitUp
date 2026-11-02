@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import {
@@ -17,6 +17,8 @@ import {
   ChevronUp,
   Settings2,
   Users,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
@@ -34,6 +36,7 @@ type GroupTab = 'transactions' | 'balances';
 
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
+  const deleteExpenseMutation = useMutation((api as any).groups?.deleteExpense);
 
   const [activeTab, setActiveTab] = useState<GroupTab>('transactions');
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -43,13 +46,14 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
+
   const [settleFrom, setSettleFrom] = useState<string | undefined>();
   const [settleTo, setSettleTo] = useState<string | undefined>();
   const [settleAmount, setSettleAmount] = useState<number | undefined>();
 
   const groupCurrency: string = details?.group?.currency ?? 'ALL';
 
-  // Live FX rate: 1 ALL = ? groupCurrency
   const [rate, setRate] = useState<number>(() => {
     const fallback = EXCHANGE_RATES[groupCurrency];
     return fallback ? 1 / fallback : 1;
@@ -61,25 +65,20 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
       .then((r) => {
         if (!cancelled) setRate(r);
       })
-      .catch(() => {
-        // fetchExchangeRate already falls back internally; nothing to do
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [groupCurrency]);
 
-  // Convert an amount stored in ALL into the group's display currency.
   const convertALL = (amountALL: number): number => {
     const converted = amountALL * rate;
     return Math.round(converted * 100) / 100;
   };
 
-  // Format an ALL amount in the group's currency, e.g. "5,000 L" or "€50.00"
   const fmtGroup = (amountALL: number, showSign = false): string =>
     formatCurrency(convertALL(amountALL), groupCurrency, showSign);
 
-  // 1. Calculate net balances and simplified debts
   const balances = useMemo(() => {
     if (!details) return new Map<string, number>();
     return calculateBalances(details.members, details.expenses, details.settlements || []);
@@ -90,7 +89,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     return simplifyDebts(details.members, balances);
   }, [details, balances]);
 
-  // 2. Member Out-of-Pocket Spending Stats
   const memberSpending = useMemo(() => {
     if (!details) return new Map<string, number>();
     const map = new Map<string, number>();
@@ -104,7 +102,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     return map;
   }, [details]);
 
-  // 3. Category Breakdown Stats
   const categoryTotals = useMemo(() => {
     if (!details) return [];
     const totals: Record<string, number> = {};
@@ -156,9 +153,19 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     setShowSettle(true);
   };
 
+  const handleDeleteExpense = async (e: React.MouseEvent, expenseId: string) => {
+    e.stopPropagation();
+    if (window.confirm('Delete this group expense?')) {
+      try {
+        await deleteExpenseMutation({ expenseId: expenseId as Id<'groupExpenses'> });
+      } catch (err) {
+        console.error('Failed to delete expense:', err);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 font-sans">
-      {/* Sticky Header */}
       <header
         className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-md"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -168,7 +175,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             type="button"
             onClick={onBack}
             className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
-            aria-label="Back to groups"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -183,7 +189,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               type="button"
               onClick={() => setShowSettings(true)}
               className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              aria-label="Group settings"
               title="Group settings"
             >
               <Settings2 className="w-5 h-5" />
@@ -192,7 +197,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               type="button"
               onClick={handleCopyGroupId}
               className="p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              aria-label="Copy invite ID"
               title="Copy Invite ID"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
@@ -202,11 +206,13 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
-        {/* Actions Grid */}
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
-            onClick={() => setShowAddExpense(true)}
+            onClick={() => {
+              setEditingExpense(null);
+              setShowAddExpense(true);
+            }}
             className="py-3 px-2 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-emerald-400" />
@@ -237,7 +243,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           </button>
         </div>
 
-        {/* Tab Switcher */}
         <div className="p-1 rounded-2xl bg-slate-200/80 grid grid-cols-2 text-xs font-bold">
           <button
             type="button"
@@ -265,10 +270,8 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           </button>
         </div>
 
-        {/* ============ TRANSACTIONS TAB ============ */}
         {activeTab === 'transactions' && (
           <>
-            {/* Total Group Volume (moved here per request) */}
             <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -344,7 +347,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               )}
             </div>
 
-            {/* Expenses Feed */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
                 Expenses ({expenses.length})
@@ -356,60 +358,72 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                   <p className="text-xs text-slate-400">No expenses recorded for this group yet.</p>
                 </div>
               ) : (
-                expenses.map(
-                  (exp: {
-                    _id: string;
-                    title: string;
-                    amount: number;
-                    currency: string;
-                    amountInALL: number;
-                    timestamp: number;
-                    category?: string;
-                  }) => {
-                    const isSameCurrency = exp.currency === group.currency;
-                    return (
-                      <div
-                        key={exp._id}
-                        className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-slate-900 text-sm truncate">{exp.title}</h4>
-                            {exp.category && (
-                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
-                                {exp.category}
-                              </span>
-                            )}
+                expenses.map((exp: any) => {
+                  const isSameCurrency = exp.currency === group.currency;
+                  const paidByMember = members.find((m: any) => m._id === exp.paidByMemberId)?.name || 'Someone';
+
+                  return (
+                    <div
+                      key={exp._id}
+                      className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{exp.title}</h4>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Paid by {paidByMember}
+                          </p>
+                          {exp.category && (
+                            <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                              {exp.category}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-bold text-slate-900 text-sm">
+                            {formatCurrency(exp.amount, exp.currency)}
                           </div>
-                          <div className="text-right shrink-0">
-                            <div className="font-mono font-bold text-slate-900 text-sm">
-                              {isSameCurrency
-                                ? formatCurrency(exp.amount, exp.currency)
-                                : formatCurrency(exp.amount, exp.currency)}
+                          {!isSameCurrency && (
+                            <div className="font-mono text-[10px] text-slate-400">
+                              ≈ {fmtGroup(exp.amountInALL)}
                             </div>
-                            {!isSameCurrency && (
-                              <div className="font-mono text-[10px] text-slate-400">
-                                ≈ {fmtGroup(exp.amountInALL)}
-                              </div>
-                            )}
+                          )}
+                          <div className="flex items-center justify-end gap-1 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingExpense(exp);
+                                setShowAddExpense(true);
+                              }}
+                              className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                              title="Edit expense"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteExpense(e, exp._id)}
+                              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                              title="Delete expense"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-                        <p className="text-xs text-slate-400 font-medium">
-                          {new Date(exp.timestamp).toLocaleDateString()}
-                        </p>
                       </div>
-                    );
-                  }
-                )
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {new Date(exp.timestamp).toLocaleDateString()}
+                      </p>
+                    </div>
+                  );
+                })
               )}
             </div>
           </>
         )}
 
-        {/* ============ BALANCES TAB ============ */}
         {activeTab === 'balances' && (
           <>
-            {/* Suggested Settlements (moved here per request) */}
             {simplifiedDebts.length > 0 && (
               <div className="p-4 rounded-3xl bg-emerald-50/60 border border-emerald-100 space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800">
@@ -444,7 +458,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               </div>
             )}
 
-            {/* Member Net Balances */}
             <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -486,11 +499,15 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
 
       <AddExpenseModal
         isOpen={showAddExpense}
-        onClose={() => setShowAddExpense(false)}
+        onClose={() => {
+          setShowAddExpense(false);
+          setEditingExpense(null);
+        }}
         groupId={groupId}
         groupCurrency={group.currency}
         allowedCurrencies={allowedCurrencies}
         members={members}
+        initialExpense={editingExpense}
       />
 
       <AddMemberModal

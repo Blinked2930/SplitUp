@@ -17,9 +17,37 @@ interface AddExpenseModalProps {
   groupCurrency: string;
   allowedCurrencies?: string[];
   members: Member[];
+  initialExpense?: any;
 }
 
 type SplitMode = 'equal' | 'exact' | 'shares';
+
+/**
+ * Largest Remainder (Hamilton) method to guarantee
+ * sum(allocatedShares) === totalAmount down to the exact penny.
+ */
+function calculatePennyExactEqualSplits(
+  totalAmount: number,
+  memberIds: string[]
+): Record<string, number> {
+  const count = memberIds.length;
+  if (count === 0) return {};
+
+  const totalCents = Math.round(totalAmount * 100);
+  const baseShareCents = Math.floor(totalCents / count);
+  let remainderCents = totalCents - baseShareCents * count;
+
+  const splits: Record<string, number> = {};
+  for (const id of memberIds) {
+    let cents = baseShareCents;
+    if (remainderCents > 0) {
+      cents += 1;
+      remainderCents -= 1;
+    }
+    splits[id] = cents / 100;
+  }
+  return splits;
+}
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
@@ -28,19 +56,19 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   groupCurrency,
   allowedCurrencies = ['ALL', 'EUR', 'USD'],
   members,
+  initialExpense,
 }) => {
-  const addExpenseMutation = useMutation(
-    (api as any).groups?.addExpense || (api as any).groups?.addGroupExpense
-  );
+  const addExpenseMutation = useMutation((api as any).groups?.addExpense || (api as any).groups?.addGroupExpense);
+  const updateExpenseMutation = useMutation((api as any).groups?.updateExpense);
 
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [selectedCurrency, setSelectedCurrency] = useState<string>(groupCurrency);
+  const [title, setTitle] = useState(initialExpense?.title || initialExpense?.description || '');
+  const [amount, setAmount] = useState(initialExpense ? String(initialExpense.amount) : '');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(initialExpense?.currency || groupCurrency);
   const [customFxRate, setCustomFxRate] = useState<string>('1');
-  const [category, setCategory] = useState('General');
-  const [paidByMemberId, setPaidByMemberId] = useState<string>(members[0]?._id ?? '');
+  const [category, setCategory] = useState(initialExpense?.category || 'General');
+  const [paidByMemberId, setPaidByMemberId] = useState<string>(initialExpense?.paidByMemberId || members[0]?._id || '');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(members.map((m) => m._id));
-  const [splitMode, setSplitMode] = useState<SplitMode>('equal');
+  const [splitMode, setSplitMode] = useState<SplitMode>(initialExpense?.splitType || 'equal');
 
   const [exactAmounts, setExactAmounts] = useState<Record<string, string>>({});
   const [sharesMap, setSharesMap] = useState<Record<string, number>>({});
@@ -54,9 +82,18 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedCurrency(groupCurrency);
+      if (initialExpense) {
+        setTitle(initialExpense.title || initialExpense.description || '');
+        setAmount(String(initialExpense.amount));
+        setSelectedCurrency(initialExpense.currency || groupCurrency);
+        setCategory(initialExpense.category || 'General');
+        setPaidByMemberId(initialExpense.paidByMemberId || members[0]?._id || '');
+        setSplitMode(initialExpense.splitType || 'equal');
+      } else {
+        setSelectedCurrency(groupCurrency);
+      }
     }
-  }, [isOpen, groupCurrency]);
+  }, [isOpen, groupCurrency, initialExpense, members]);
 
   useEffect(() => {
     if (members.length > 0) {
@@ -122,10 +159,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     let splits: { memberId: Id<'groupMembers'>; amountALL: number }[] = [];
 
     if (splitMode === 'equal') {
-      const splitVal = Math.round((baseConvertedAmount / selectedMemberIds.length) * 100) / 100;
+      const exactMap = calculatePennyExactEqualSplits(baseConvertedAmount, selectedMemberIds);
       splits = selectedMemberIds.map((mId) => ({
         memberId: mId as Id<'groupMembers'>,
-        amountALL: splitVal,
+        amountALL: exactMap[mId] || 0,
       }));
     } else if (splitMode === 'exact') {
       if (Math.abs(exactDifference) > 0.05) {
@@ -155,24 +192,38 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await addExpenseMutation({
-        groupId,
-        title: title.trim(),
-        amount: numAmount,
-        currency: selectedCurrency,
-        amountInALL: baseConvertedAmount,
-        category: category.trim() || 'General',
-        paidByMemberId: paidByMemberId as Id<'groupMembers'>,
-        splitType: splitMode,
-        splits,
-      });
+      if (initialExpense?._id || initialExpense?.id) {
+        await updateExpenseMutation({
+          expenseId: (initialExpense._id || initialExpense.id) as Id<'groupExpenses'>,
+          title: title.trim(),
+          amount: numAmount,
+          currency: selectedCurrency,
+          amountInALL: baseConvertedAmount,
+          category: category.trim() || 'General',
+          paidByMemberId: paidByMemberId as Id<'groupMembers'>,
+          splitType: splitMode,
+          splits,
+        });
+      } else {
+        await addExpenseMutation({
+          groupId,
+          title: title.trim(),
+          amount: numAmount,
+          currency: selectedCurrency,
+          amountInALL: baseConvertedAmount,
+          category: category.trim() || 'General',
+          paidByMemberId: paidByMemberId as Id<'groupMembers'>,
+          splitType: splitMode,
+          splits,
+        });
+      }
 
       setTitle('');
       setAmount('');
       setErrorMsg(null);
       onClose();
     } catch (err) {
-      console.error('Failed to add expense:', err);
+      console.error('Failed to save expense:', err);
       setErrorMsg('Failed to save expense. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -184,7 +235,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -195,7 +246,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
               <Receipt className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900">Add Group Expense</h3>
+            <h3 className="text-lg font-bold text-slate-900">
+              {initialExpense ? 'Edit Group Expense' : 'Add Group Expense'}
+            </h3>
           </div>
           <button
             type="button"
@@ -473,14 +526,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
             className="w-full py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
           >
             <Check className="w-4 h-4" />
-            <span>{isSubmitting ? 'Saving...' : 'Save Expense'}</span>
+            <span>{isSubmitting ? 'Saving...' : initialExpense ? 'Update Expense' : 'Save Expense'}</span>
           </button>
         </form>
 
         {showCurrencyPopover && (
           <div
             onClick={() => setShowCurrencyPopover(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -516,7 +569,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         {showCategoryPopover && (
           <div
             onClick={() => setShowCategoryPopover(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -552,7 +605,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         {showPaidByPopover && (
           <div
             onClick={() => setShowPaidByPopover(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
           >
             <div
               onClick={(e) => e.stopPropagation()}
