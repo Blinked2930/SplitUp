@@ -97,11 +97,24 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     }
   }, [selectedCurrency, groupCurrency]);
 
-  if (!isOpen) return null;
-
   const numAmount = parseFloat(amount) || 0;
   const numRate = parseFloat(customFxRate) || 1;
   const baseConvertedAmount = Math.round(numAmount * numRate * 100) / 100;
+
+  const totalShares = selectedMemberIds.reduce((sum, id) => {
+    return sum + (sharesMap[id] || 1);
+  }, 0);
+
+  // Pre-compute the shares allocation ONCE per render so the preview and
+  // the submit path can never disagree.
+  const sharesAllocation = useMemo(() => {
+    if (splitMode !== 'shares' || selectedMemberIds.length === 0) return {};
+    const weights: Record<string, number> = {};
+    for (const mId of selectedMemberIds) weights[mId] = sharesMap[mId] ?? 1;
+    return allocateByShares(baseConvertedAmount, weights);
+  }, [splitMode, selectedMemberIds, sharesMap, baseConvertedAmount]);
+
+  if (!isOpen) return null;
 
   const toggleMember = (id: string) => {
     if (selectedMemberIds.includes(id)) {
@@ -118,19 +131,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   }, 0);
 
   const exactDifference = Math.round((baseConvertedAmount - totalExactAllocated) * 100) / 100;
-
-  const totalShares = selectedMemberIds.reduce((sum, id) => {
-    return sum + (sharesMap[id] || 1);
-  }, 0);
-
-  // Pre-compute the shares allocation ONCE per render so the preview and
-  // the submit path can never disagree.
-  const sharesAllocation = useMemo(() => {
-    if (splitMode !== 'shares' || selectedMemberIds.length === 0) return {};
-    const weights: Record<string, number> = {};
-    for (const mId of selectedMemberIds) weights[mId] = sharesMap[mId] ?? 1;
-    return allocateByShares(baseConvertedAmount, weights);
-  }, [splitMode, selectedMemberIds, sharesMap, baseConvertedAmount]);
 
   const handleDeleteFromModal = async () => {
     const expId = initialExpense?._id || initialExpense?.id;

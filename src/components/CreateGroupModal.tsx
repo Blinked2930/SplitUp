@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { X, Users, Plus, Trash2, Check, Loader2 } from 'lucide-react';
+import { X, Users, Plus, Trash2, Check, Loader2, AlertCircle } from 'lucide-react';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
@@ -19,6 +19,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
   const [members, setMembers] = useState<string[]>([]);
   const [memberInput, setMemberInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -35,6 +36,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!groupName.trim() || !yourName.trim()) return;
 
     setIsSubmitting(true);
@@ -56,9 +58,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
       if (onSuccess && res?.groupId) {
         onSuccess(res.groupId);
       }
-    } catch (err) {
-      console.error('Failed to create group:', err);
-      alert('Error creating group. Make sure your Convex backend is running.');
+    } catch (err: any) {
+      // The backend rejects duplicate names for groups you already own.
+      // Surface the server's message verbatim so the user knows what to fix.
+      const message: string =
+        err?.message?.replace(/^Uncaught Error:\s*/, '') ??
+        'Could not create group. Please try again.';
+      setErrorMsg(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -95,6 +101,9 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
               onChange={(e) => setGroupName(e.target.value)}
               className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 text-sm font-medium"
             />
+            <p className="text-[10px] text-slate-400 mt-1 px-1">
+              Must be unique among groups you own.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -188,6 +197,13 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
               </div>
             )}
           </div>
+
+          {errorMsg && (
+            <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           <button
             type="submit"

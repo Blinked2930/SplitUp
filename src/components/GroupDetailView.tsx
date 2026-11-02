@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from 'convex/react';
+import { useUser } from '@clerk/clerk-react'; // CLERK_HOOK
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import {
@@ -34,6 +35,11 @@ type GroupTab = 'transactions' | 'balances';
 
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
+
+  // CLERK_HOOK: if you use a different identity provider (or a Convex query
+  // for the current user), swap these two lines. Only `clerkUserId` matters.
+  const { user } = useUser();
+  const clerkUserId = user?.id ?? null;
 
   const [activeTab, setActiveTab] = useState<GroupTab>('transactions');
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -137,6 +143,10 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
   const allowedCurrencies: string[] =
     (group as any).allowedCurrencies ?? ['ALL', 'EUR', 'USD'];
 
+  const groupStatus: string = (group as any).status ?? 'active';
+  const isArchived = groupStatus === 'archived';
+  const isOwner = clerkUserId != null && (group as any).createdBy === clerkUserId;
+
   const handleCopyGroupId = () => {
     navigator.clipboard.writeText(group._id);
     setCopied(true);
@@ -168,6 +178,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             <h2 className="font-bold text-slate-900 text-base truncate">{group.name}</h2>
             <p className="text-[10px] text-slate-400 font-medium">
               {members.length} Members · {group.currency}
+              {isArchived && ' · Archived'}
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -503,6 +514,9 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         currentName={group.name}
         currentCurrency={group.currency}
         currentAllowedCurrencies={allowedCurrencies}
+        isOwner={isOwner}
+        isArchived={isArchived}
+        onDeleted={onBack}
       />
     </div>
   );

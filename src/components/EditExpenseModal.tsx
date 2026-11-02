@@ -129,7 +129,9 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
   const numAmountSafe = parseFloat(amount) || 0;
 
   // Pre-compute the shares allocation once per render so preview and save
-  // are guaranteed to agree to the penny.
+  // are guaranteed to agree to the penny. MUST be above any early return,
+  // otherwise React throws "rendered more/fewer hooks than previous render"
+  // when the modal toggles open/closed.
   const sharesAllocation = useMemo(() => {
     if (splitMode !== 'shares' || selectedMemberIds.length === 0) return {};
     const weights: Record<string, number> = {};
