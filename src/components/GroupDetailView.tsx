@@ -1,23 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from 'convex/react';
-import { useUser } from '@clerk/clerk-react'; // CLERK_HOOK
+import { useUser } from '@clerk/clerk-react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import {
-  ArrowLeft,
-  Plus,
-  Receipt,
-  UserPlus,
-  Scale,
-  ArrowRight,
-  Share2,
-  Check,
-  PieChart,
-  Wallet,
-  ChevronDown,
-  ChevronUp,
-  Settings2,
-  Users,
+  ArrowLeft, Plus, Receipt, UserPlus, Scale, ArrowRight, Share2, Check,
+  PieChart, Wallet, ChevronDown, ChevronUp, Settings2, Users,
 } from 'lucide-react';
 import { AddExpenseModal } from './AddExpenseModal';
 import { AddMemberModal } from './AddMemberModal';
@@ -36,8 +24,6 @@ type GroupTab = 'transactions' | 'balances';
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBack }) => {
   const details = useQuery((api as any).groups?.getGroupDetails, { groupId });
 
-  // CLERK_HOOK: if you use a different identity provider (or a Convex query
-  // for the current user), swap these two lines. Only `clerkUserId` matters.
   const { user } = useUser();
   const clerkUserId = user?.id ?? null;
 
@@ -61,17 +47,33 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     const fallback = EXCHANGE_RATES[groupCurrency];
     return fallback ? 1 / fallback : 1;
   });
+  // failSafe = true means "we don't have a trustworthy rate yet, show L".
+  const [fxFailSafe, setFxFailSafe] = useState<boolean>(groupCurrency !== 'ALL');
 
   useEffect(() => {
     let cancelled = false;
+    if (groupCurrency === 'ALL') {
+      setRate(1);
+      setFxFailSafe(false);
+      return;
+    }
+    setFxFailSafe(true);
     fetchExchangeRate('ALL', groupCurrency)
       .then((r) => {
-        if (!cancelled) setRate(r);
+        if (cancelled) return;
+        if (typeof r === 'number' && r > 0) {
+          setRate(r);
+          setFxFailSafe(false);
+        } else {
+          // No usable rate. Keep failSafe on, so we show raw L rather than
+          // mislabel it as group currency.
+          setFxFailSafe(true);
+        }
       })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => {
+        if (!cancelled) setFxFailSafe(true);
+      });
+    return () => { cancelled = true; };
   }, [groupCurrency]);
 
   const convertALL = (amountALL: number): number => {
@@ -79,8 +81,12 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     return Math.round(converted * 100) / 100;
   };
 
-  const fmtGroup = (amountALL: number, showSign = false): string =>
-    formatCurrency(convertALL(amountALL), groupCurrency, showSign);
+  const fmtGroup = (amountALL: number, showSign = false): string => {
+    if (fxFailSafe) {
+      return formatCurrency(amountALL, 'ALL', showSign);
+    }
+    return formatCurrency(convertALL(amountALL), groupCurrency, showSign);
+  };
 
   const balances = useMemo(() => {
     if (!details) return new Map<string, number>();
@@ -96,12 +102,10 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     if (!details) return new Map<string, number>();
     const map = new Map<string, number>();
     details.members.forEach((m: { _id: string }) => map.set(m._id, 0));
-
     details.expenses.forEach((exp: { paidByMemberId: string; amountInALL: number }) => {
       const current = map.get(exp.paidByMemberId) ?? 0;
       map.set(exp.paidByMemberId, current + exp.amountInALL);
     });
-
     return map;
   }, [details]);
 
@@ -109,17 +113,14 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     if (!details) return [];
     const totals: Record<string, number> = {};
     let totalSpent = 0;
-
     details.expenses.forEach((exp: { category?: string; amountInALL: number }) => {
       const cat = exp.category?.trim() || 'General';
       totals[cat] = (totals[cat] || 0) + exp.amountInALL;
       totalSpent += exp.amountInALL;
     });
-
     return Object.entries(totals)
       .map(([category, amount]) => ({
-        category,
-        amount,
+        category, amount,
         percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
@@ -140,9 +141,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
 
   const { group, members, expenses } = details;
 
-  const allowedCurrencies: string[] =
-    (group as any).allowedCurrencies ?? ['ALL', 'EUR', 'USD'];
-
+  const allowedCurrencies: string[] = (group as any).allowedCurrencies ?? ['ALL', 'EUR', 'USD'];
   const groupStatus: string = (group as any).status ?? 'active';
   const isArchived = groupStatus === 'archived';
   const isOwner = clerkUserId != null && (group as any).createdBy === clerkUserId;
@@ -215,7 +214,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             <Plus className="w-4 h-4 text-emerald-400" />
             <span>Expense</span>
           </button>
-
           <button
             type="button"
             onClick={() => {
@@ -229,7 +227,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             <Scale className="w-4 h-4" />
             <span>Settle</span>
           </button>
-
           <button
             type="button"
             onClick={() => setShowAddMember(true)}
@@ -245,9 +242,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             type="button"
             onClick={() => setActiveTab('transactions')}
             className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'transactions'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+              activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             <Receipt className="w-3.5 h-3.5 text-emerald-600" />
@@ -257,9 +252,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
             type="button"
             onClick={() => setActiveTab('balances')}
             className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'balances'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+              activeTab === 'balances' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             <Users className="w-3.5 h-3.5 text-indigo-600" />
@@ -284,7 +277,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                     </p>
                   </div>
                 </div>
-
                 <button
                   type="button"
                   onClick={() => setShowBreakdown(!showBreakdown)}
@@ -348,7 +340,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
                 Expenses ({expenses.length})
               </h3>
-
               {expenses.length === 0 ? (
                 <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
                   <Receipt className="w-6 h-6 text-slate-300 mx-auto" />
@@ -358,7 +349,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                 expenses.map((exp: any) => {
                   const isSameCurrency = exp.currency === group.currency;
                   const paidByMember = members.find((m: any) => m._id === exp.paidByMemberId)?.name || 'Someone';
-
                   return (
                     <div
                       key={exp._id}
@@ -443,12 +433,17 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Member Net Positions
                 </h3>
-                <span className="text-xs text-slate-500 font-medium">{group.currency}</span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {fxFailSafe ? 'ALL (base)' : group.currency}
+                </span>
               </div>
               <div className="space-y-2">
                 {members.map((m: { _id: string; name: string }) => {
                   const netALL = balances.get(m._id) ?? 0;
-                  const net = Math.round(convertALL(netALL) * 100) / 100;
+                  const net = fxFailSafe ? Math.round(netALL) : Math.round(convertALL(netALL) * 100) / 100;
+                  const display = fxFailSafe
+                    ? formatCurrency(net, 'ALL', true)
+                    : formatCurrency(net, group.currency, true);
                   return (
                     <div key={m._id} className="flex items-center justify-between text-sm py-1 gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -462,11 +457,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
                           net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
                         }`}
                       >
-                        {net > 0
-                          ? formatCurrency(net, group.currency, true)
-                          : net < 0
-                          ? formatCurrency(net, group.currency, true)
-                          : 'Settled'}
+                        {net === 0 ? 'Settled' : display}
                       </span>
                     </div>
                   );
@@ -489,13 +480,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         members={members}
         initialExpense={editingExpense}
       />
-
-      <AddMemberModal
-        isOpen={showAddMember}
-        onClose={() => setShowAddMember(false)}
-        groupId={groupId}
-      />
-
+      <AddMemberModal isOpen={showAddMember} onClose={() => setShowAddMember(false)} groupId={groupId} />
       <SettleDebtModal
         isOpen={showSettle}
         onClose={() => setShowSettle(false)}
@@ -506,7 +491,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
         initialToMemberId={settleTo}
         initialAmount={settleAmount}
       />
-
       <GroupSettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
