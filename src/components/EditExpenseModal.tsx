@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
@@ -13,6 +13,8 @@ import {
   PieChart,
   AlertCircle,
 } from 'lucide-react';
+import { allocateByShares, reconstructSharesFromAmounts } from '../utils/splitMath';
+import { fetchExchangeRate } from '../utils/currencies';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -24,6 +26,7 @@ interface Expense {
   title: string;
   amount: number;
   currency: 'ALL' | 'EUR' | 'USD';
+  amountInALL: number;
   category?: string;
   paidByMemberId: Id<'groupMembers'>;
   splitType: 'equal' | 'exact' | 'shares';
@@ -62,7 +65,28 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // FX rate: groupCurrency -> ALL. Used to keep `amountInALL` correct when
+  // the group currency is not ALL. Defaults to 1 (correct for ALL groups)
+  // so we never block editing while the fetch is in flight.
+  const [fxRateToALL, setFxRateToALL] = useState<number>(1);
+
   const categories = ['Food & Dining', 'Transportation', 'Accommodation', 'Utilities', 'Entertainment', 'General'];
+
+  useEffect(() => {
+    let cancelled = false;
+    if (groupCurrency === 'ALL') {
+      setFxRateToALL(1);
+      return;
+    }
+    fetchExchangeRate(groupCurrency, 'ALL')
+      .then((r) => {
+        if (!cancelled) setFxRateToALL(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [groupCurrency]);
 
   useEffect(() => {
     if (expense) {
@@ -77,22 +101,45 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
         setSelectedMemberIds(splitMemberIds);
 
         const exacts: Record<string, string> = {};
-        const shares: Record<string, number> = {};
         expense.splits.forEach((s) => {
           exacts[s.memberId] = s.amountALL.toString();
-          shares[s.memberId] = 1;
         });
         setExactAmounts(exacts);
-        setSharesMap(shares);
+
+        // Reconstruct the integer shares map from the stored per-member
+        // amounts so editing a shares-mode expense preserves the ratio
+        // instead of resetting everything to 1.
+        const reconstructed = reconstructSharesFromAmounts(
+          expense.splits.map((s) => ({ memberId: s.memberId, amountALL: s.amountALL }))
+        );
+        const fullShares: Record<string, number> = {};
+        for (const m of members) {
+          fullShares[m._id] = reconstructed[m._id] ?? 1;
+        }
+        setSharesMap(fullShares);
       } else {
         setSelectedMemberIds(members.map((m) => m._id));
+        const initialShares: Record<string, number> = {};
+        for (const m of members) initialShares[m._id] = 1;
+        setSharesMap(initialShares);
       }
     }
   }, [expense, members]);
 
+  const numAmountSafe = parseFloat(amount) || 0;
+
+  // Pre-compute the shares allocation once per render so preview and save
+  // are guaranteed to agree to the penny.
+  const sharesAllocation = useMemo(() => {
+    if (splitMode !== 'shares' || selectedMemberIds.length === 0) return {};
+    const weights: Record<string, number> = {};
+    for (const mId of selectedMemberIds) weights[mId] = sharesMap[mId] ?? 1;
+    return allocateByShares(numAmountSafe, weights);
+  }, [splitMode, selectedMemberIds, sharesMap, numAmountSafe]);
+
   if (!isOpen || !expense) return null;
 
-  const numAmount = parseFloat(amount) || 0;
+  const numAmount = numAmountSafe;
 
   const toggleMember = (id: string) => {
     if (selectedMemberIds.includes(id)) {
@@ -126,10 +173,12 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
     let splits: { memberId: Id<'groupMembers'>; amountALL: number }[] = [];
 
     if (splitMode === 'equal') {
-      const splitVal = Math.round((numAmount / selectedMemberIds.length) * 100) / 100;
+      const weights: Record<string, number> = {};
+      for (const mId of selectedMemberIds) weights[mId] = 1;
+      const allocation = allocateByShares(numAmount, weights);
       splits = selectedMemberIds.map((mId) => ({
         memberId: mId as Id<'groupMembers'>,
-        amountALL: splitVal,
+        amountALL: allocation[mId] ?? 0,
       }));
     } else if (splitMode === 'exact') {
       if (Math.abs(exactDifference) > 0.05) {
@@ -147,15 +196,15 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
         setErrorMsg('Total shares must be at least 1.');
         return;
       }
-      splits = selectedMemberIds.map((mId) => {
-        const memberShares = sharesMap[mId] || 1;
-        const calculatedAmount = Math.round(((numAmount * memberShares) / totalShares) * 100) / 100;
-        return {
-          memberId: mId as Id<'groupMembers'>,
-          amountALL: calculatedAmount,
-        };
-      });
+      splits = selectedMemberIds.map((mId) => ({
+        memberId: mId as Id<'groupMembers'>,
+        amountALL: sharesAllocation[mId] ?? 0,
+      }));
     }
+
+    // `amount` is denominated in the group's currency; `amountInALL` is the
+    // canonical ALL-denominated amount the backend uses for balance math.
+    const amountInALL = Math.round(numAmount * fxRateToALL * 100) / 100;
 
     setIsSubmitting(true);
     try {
@@ -164,7 +213,7 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
         title: title.trim(),
         amount: numAmount,
         currency: groupCurrency,
-        amountInALL: numAmount,
+        amountInALL,
         category: category.trim(),
         paidByMemberId: paidByMemberId as Id<'groupMembers'>,
         splitType: splitMode,
@@ -248,7 +297,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
               />
             </div>
 
-            {/* Custom Centered Category Trigger */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Category
@@ -264,7 +312,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
             </div>
           </div>
 
-          {/* Custom Centered Paid By Trigger */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
               Paid By *
@@ -279,7 +326,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
             </button>
           </div>
 
-          {/* Split Mode Selector */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
               Split Breakdown Option
@@ -388,10 +434,7 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
               <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                 {members.map((m) => {
                   const currentShare = sharesMap[m._id] ?? 1;
-                  const calculatedPortion =
-                    totalShares > 0 && numAmount > 0
-                      ? Math.round(((numAmount * currentShare) / totalShares) * 100) / 100
-                      : 0;
+                  const calculatedPortion = sharesAllocation[m._id] ?? 0;
 
                   return (
                     <div key={m._id} className="flex items-center justify-between gap-2 text-xs">
@@ -462,7 +505,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
           </div>
         </form>
 
-        {/* Centered Category Popover */}
         {showCategoryPopover && (
           <div
             onClick={() => setShowCategoryPopover(false)}
@@ -499,7 +541,6 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
           </div>
         )}
 
-        {/* Centered Paid By Popover */}
         {showPaidByPopover && (
           <div
             onClick={() => setShowPaidByPopover(false)}

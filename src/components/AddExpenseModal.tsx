@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
 import { X, Receipt, Check, Calculator, PieChart, Users, AlertCircle, ChevronDown, RefreshCw, Trash2 } from 'lucide-react';
 import { fetchExchangeRate } from '../utils/currencies';
+import { allocateByShares } from '../utils/splitMath';
 
 interface Member {
   _id: Id<'groupMembers'>;
@@ -21,33 +22,6 @@ interface AddExpenseModalProps {
 }
 
 type SplitMode = 'equal' | 'exact' | 'shares';
-
-/**
- * Largest Remainder (Hamilton) method to guarantee
- * sum(allocatedShares) === totalAmount down to the exact penny.
- */
-function calculatePennyExactEqualSplits(
-  totalAmount: number,
-  memberIds: string[]
-): Record<string, number> {
-  const count = memberIds.length;
-  if (count === 0) return {};
-
-  const totalCents = Math.round(totalAmount * 100);
-  const baseShareCents = Math.floor(totalCents / count);
-  let remainderCents = totalCents - baseShareCents * count;
-
-  const splits: Record<string, number> = {};
-  for (const id of memberIds) {
-    let cents = baseShareCents;
-    if (remainderCents > 0) {
-      cents += 1;
-      remainderCents -= 1;
-    }
-    splits[id] = cents / 100;
-  }
-  return splits;
-}
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   isOpen,
@@ -149,6 +123,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     return sum + (sharesMap[id] || 1);
   }, 0);
 
+  // Pre-compute the shares allocation ONCE per render so the preview and
+  // the submit path can never disagree.
+  const sharesAllocation = useMemo(() => {
+    if (splitMode !== 'shares' || selectedMemberIds.length === 0) return {};
+    const weights: Record<string, number> = {};
+    for (const mId of selectedMemberIds) weights[mId] = sharesMap[mId] ?? 1;
+    return allocateByShares(baseConvertedAmount, weights);
+  }, [splitMode, selectedMemberIds, sharesMap, baseConvertedAmount]);
+
   const handleDeleteFromModal = async () => {
     const expId = initialExpense?._id || initialExpense?.id;
     if (!expId) return;
@@ -179,10 +162,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
     let splits: { memberId: Id<'groupMembers'>; amountALL: number }[] = [];
 
     if (splitMode === 'equal') {
-      const exactMap = calculatePennyExactEqualSplits(baseConvertedAmount, selectedMemberIds);
+      const weights: Record<string, number> = {};
+      for (const mId of selectedMemberIds) weights[mId] = 1;
+      const allocation = allocateByShares(baseConvertedAmount, weights);
       splits = selectedMemberIds.map((mId) => ({
         memberId: mId as Id<'groupMembers'>,
-        amountALL: exactMap[mId] || 0,
+        amountALL: allocation[mId] ?? 0,
       }));
     } else if (splitMode === 'exact') {
       if (Math.abs(exactDifference) > 0.05) {
@@ -200,14 +185,10 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
         setErrorMsg('Total shares must be at least 1.');
         return;
       }
-      splits = selectedMemberIds.map((mId) => {
-        const memberShares = sharesMap[mId] || 1;
-        const calculatedAmount = Math.round(((baseConvertedAmount * memberShares) / totalShares) * 100) / 100;
-        return {
-          memberId: mId as Id<'groupMembers'>,
-          amountALL: calculatedAmount,
-        };
-      });
+      splits = selectedMemberIds.map((mId) => ({
+        memberId: mId as Id<'groupMembers'>,
+        amountALL: sharesAllocation[mId] ?? 0,
+      }));
     }
 
     setIsSubmitting(true);
@@ -499,10 +480,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                 {members.map((m) => {
                   const currentShare = sharesMap[m._id] ?? 1;
-                  const calculatedPortion =
-                    totalShares > 0 && baseConvertedAmount > 0
-                      ? Math.round(((baseConvertedAmount * currentShare) / totalShares) * 100) / 100
-                      : 0;
+                  const calculatedPortion = sharesAllocation[m._id] ?? 0;
 
                   return (
                     <div key={m._id} className="flex items-center justify-between gap-2 text-xs">
