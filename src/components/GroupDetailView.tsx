@@ -47,7 +47,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
     const fallback = EXCHANGE_RATES[groupCurrency];
     return fallback ? 1 / fallback : 1;
   });
-  // failSafe = true means "we don't have a trustworthy rate yet, show L".
   const [fxFailSafe, setFxFailSafe] = useState<boolean>(groupCurrency !== 'ALL');
 
   useEffect(() => {
@@ -65,8 +64,6 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId, onBac
           setRate(r);
           setFxFailSafe(false);
         } else {
-          // No usable rate. Keep failSafe on, so we show raw L rather than
-          // mislabel it as group currency.
           setFxFailSafe(true);
         }
       })

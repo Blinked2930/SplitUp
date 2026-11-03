@@ -21,7 +21,7 @@ import { CreateGroupModal } from './CreateGroupModal';
 import { JoinGroupModal } from './JoinGroupModal';
 import { GroupDetailView } from './GroupDetailView';
 import { ActivityFeedView } from './ActivityFeedView';
-import { formatCurrency } from '../utils/currencies';
+import { formatCurrency, convertFromALL, fetchExchangeRate } from '../utils/currencies';
 
 export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SplitTab>('groups');
@@ -37,6 +37,34 @@ export const Dashboard: React.FC = () => {
   });
 
   const unarchiveGroupMutation = useMutation((api as any).groups?.unarchiveGroup);
+
+  // Base currency preference (from Convex userPreferences).
+  const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as
+    | { baseCurrency: string }
+    | undefined;
+  const baseCurrency: string = prefs?.baseCurrency ?? 'ALL';
+
+  const [liveRate, setLiveRate] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (baseCurrency === 'ALL') {
+      setLiveRate(1);
+      return;
+    }
+    fetchExchangeRate(baseCurrency, 'ALL')
+      .then((r) => { if (!cancelled) setLiveRate(typeof r === 'number' && r > 0 ? r : null); })
+      .catch(() => { if (!cancelled) setLiveRate(null); });
+    return () => { cancelled = true; };
+  }, [baseCurrency]);
+
+  const fmtBase = (amountALL: number, showSign = false): string => {
+    const rate = liveRate ?? 1;
+    const inBase = baseCurrency === 'ALL'
+      ? Math.round(amountALL)
+      : Number((amountALL / rate).toFixed(2));
+    return formatCurrency(inBase, baseCurrency, showSign);
+  };
+  void convertFromALL;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -107,7 +135,6 @@ export const Dashboard: React.FC = () => {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-4">
-        {/* Overall Balance Summary Card */}
         <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -122,8 +149,9 @@ export const Dashboard: React.FC = () => {
                 }`}
               >
                 {overallNetPosition > 0 ? '+' : ''}
-                {formatCurrency(overallNetPosition, 'ALL')}
+                {fmtBase(overallNetPosition)}
               </h2>
+              <p className="text-[10px] text-slate-400 mt-1">in {baseCurrency}</p>
             </div>
             <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
               <Sparkles className="w-5 h-5" />
@@ -138,7 +166,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <p className="text-[10px] text-slate-500 font-medium">You get back</p>
                 <p className="text-xs font-bold text-emerald-700 font-mono">
-                  {formatCurrency(totalReceivableALL, 'ALL')}
+                  {fmtBase(totalReceivableALL)}
                 </p>
               </div>
             </div>
@@ -150,7 +178,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <p className="text-[10px] text-slate-500 font-medium">You owe</p>
                 <p className="text-xs font-bold text-rose-700 font-mono">
-                  {formatCurrency(totalPayableALL, 'ALL')}
+                  {fmtBase(totalPayableALL)}
                 </p>
               </div>
             </div>
@@ -231,7 +259,7 @@ export const Dashboard: React.FC = () => {
                               }`}
                             >
                               {net > 0 ? '+' : ''}
-                              {formatCurrency(net, group.currency || 'ALL')}
+                              {fmtBase(net)}
                             </p>
                             <p className="text-[10px] text-slate-400 font-medium">
                               {net > 0 ? 'get back' : net < 0 ? 'you owe' : 'settled'}
